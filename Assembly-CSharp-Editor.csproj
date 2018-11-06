@@ -45,7 +45,10 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+     <Compile Include="Assets\Editor\AssetBundle\AssetBundleCreator.cs" />
      <Compile Include="Assets\Editor\Custom\CustomSettings.cs" />
+     <Compile Include="Assets\Editor\CustomUI\MyUI.cs" />
+     <Compile Include="Assets\Editor\EditorSettings.cs" />
      <Compile Include="Assets\ToLua\Editor\Extend\ToLua_LuaInterface_EventObject.cs" />
      <Compile Include="Assets\ToLua\Editor\Extend\ToLua_LuaInterface_LuaConstructor.cs" />
      <Compile Include="Assets\ToLua\Editor\Extend\ToLua_LuaInterface_LuaField.cs" />
@@ -107,17 +110,8 @@
  <Reference Include="UnityEditor.Android.Extensions">
  <HintPath>C:/Program Files/Unity/Editor/Data/PlaybackEngines/AndroidPlayer/UnityEditor.Android.Extensions.dll</HintPath>
  </Reference>
- <Reference Include="UnityEditor.iOS.Extensions">
- <HintPath>C:/Program Files/Unity/Editor/Data/PlaybackEngines/iOSSupport/UnityEditor.iOS.Extensions.dll</HintPath>
- </Reference>
  <Reference Include="UnityEditor.WindowsStandalone.Extensions">
  <HintPath>C:/Program Files/Unity/Editor/Data/PlaybackEngines/windowsstandalonesupport/UnityEditor.WindowsStandalone.Extensions.dll</HintPath>
- </Reference>
- <Reference Include="UnityEditor.iOS.Extensions.Xcode">
- <HintPath>C:/Program Files/Unity/Editor/Data/PlaybackEngines/iOSSupport/UnityEditor.iOS.Extensions.Xcode.dll</HintPath>
- </Reference>
- <Reference Include="UnityEditor.iOS.Extensions.Common">
- <HintPath>C:/Program Files/Unity/Editor/Data/PlaybackEngines/iOSSupport/UnityEditor.iOS.Extensions.Common.dll</HintPath>
  </Reference>
   </ItemGroup>
   <ItemGroup>

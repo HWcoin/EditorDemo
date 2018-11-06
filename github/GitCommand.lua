@@ -14,6 +14,8 @@
     git add readme.txt
     git commit [-m msg]
 
+    git push
+
     5. 查看日志
     git log [--pretty=oneline]
 
