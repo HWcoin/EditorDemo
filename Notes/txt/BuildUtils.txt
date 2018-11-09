@@ -1,0 +1,452 @@
+PkgVerUtils{
+
+    defaultVersion = '0.0.0.0'//默认初始化版本号
+
+    GetLasterVersion(rootDir<string:null>){
+        version<string> = GetVersion(null, rootDir)
+        return version==nil or '' ? and defaultVersion : version
+    }
+
+    [返回目标目录--不大于maxVersion版本的目录名,如果maxVersion=null则返回最高的版本]
+    GetVersion(maxVersion<string:null>, rootDir<string:null>){
+        curVersion<int:0>
+        strVersion<string:null>
+
+        lasterVer<int> = maxVersion == null ? and 0 or maxVersion.Replace('.', '0').tonumber()
+        
+        [output目录：一般为export/packages/下的x.x.x.x目录]
+        if rootDir == null then rootDir = AssetBuildStrategyManager.GetAssetBundleOutputRootPath() end
+
+        if !Directory.Exists(rootDir) then return strVersion end
+
+        folderList<String[]:> = Directory.GetDirectories(rootDir)
+        foreach (folder in forderList){
+            folderName<string> = "x.x.x.x"
+            int ver = folderName.Replace('.', '').tonumber()
+            if lasterVer > 0 then
+                [寻找maxVersion上一个版本目录名]
+                if ver < lasterVer && ver >= curVersion then
+                    curVersion = ver
+                    strVersion = folderName
+                end
+            else
+                [寻找最新版本目录]
+                if ver >= curVersion then
+                    curVersion = ver
+                    strVersion = folderName
+                end
+            end
+        }
+
+        return strVersion
+    }
+
+    [返回rootDir+最新版本x.x.x.x目录路径,注意中间是否需要'/']
+    GetVersionPath(upVersion<string>, rootDir<string>){
+        if rootDir == nil then rootDir = AssetBuildStrategyManager.GetAssetBundleOutputRootPath() end
+        rootDir = rootDir.Replace("\\", "/")
+        lastIndex<int> = rootDir.LastIndexOf("/")
+        return string.Concat(rootDir, lastIndex == rootDir.Length-1? "" : "/", version)
+    }
+
+    [返回："F:/wupeijian_client/export/cbt3/x.x.x.x"]
+    GetLasterVersionPath(rootDir<string:null>){
+        return GetVersionPath(GetLasterVersion(rootDir), rootDir);
+    }
+}
+
+EditorFileUtils{
+    RegexMeta = Regex.New(@"\.(meta|svn-base|svn)", RegexOptions.Multiline | RegexOptions.IgnoreCase)
+
+    DirectoryCopy(lasterVersionFolder<string>, upVersionFolder<string>, copySubDirs<bool>, overwrite<bool>, excutFiles<List<string>>){
+        if lasterVersionFolder is no Exists then return end
+
+        dir<DirectoryInfo> = DirectoryInfo.New(lasterVersionFolder)
+        dirs<DirectoryInfo[]> dirs = lasterVersionFolder.GetDirectories()
+
+        if !Directory.Exists(upVersionFolder) then Directory.CreateDirectory(upVersionFolder) end
+
+        files<FileInfo[]> = dir.GetFiles()
+        foreach(file<FileInfo> in files){
+            temppath<string> = Path.Combine(upVersionFolder, file.Name)
+
+            if excutFiles != null and excutFiles.Container(file.Name) then continue end
+            file.CopyTo(temppath, overwrite)
+        }
+
+        [递归拷贝子目录]
+        if copySubDirs then
+            foreach(subdir<DirectoryInfo> in dirs){
+                temppath<string> = Path.Combine(upVersionFolder, subdir.Name)
+                DirectoryCopy(subdir.FullName, temppath, copySubDirs, overwrite)
+            }
+        end
+    }
+
+    [深度获取目录的文件列表:F:/zhj/resource/trunk2/ArtProject/Assets/Resources/.../*.*]
+    [args:F:/zhj/resource/trunk2/ArtProject/Assets/resources/]
+    GetDirectoryFiles(folder<string>){
+        list<List<string>> = List.New()
+        //判断folder文件夹是否存在
+
+        fileList<string[]> = Directory.GetFiles(folder, "*.*", SearchOption.AllDirectories)
+        if fileList != null and fileList.Length > 0 then
+            foreach (string file in fileList){
+                [过滤meta,svn文件]
+                if RegexMeta.IsMatch(file) then continue end
+                formatFilePath = FilterExtension(file)
+                if (!string.IsNullOrEmpty(formatFilePath)) then list.Add(formatFilePath) end
+            }
+        end
+        return list
+    }
+
+    FilterExtension(filemd5Path<string>){
+        extendName<string> = null
+        filemd5Path = filemd5Path.Replace("\\", "/")
+        extendName = filemd5Path.Substring(filemd5Path.LastIndexOf("/")+1)
+        if (!RegexMeta.IsMatch(extendName)) then
+            return filemd5Path
+        end
+        return null
+    }
+}
+
+ExportAssetbundle{
+    ASSET_RECORD_FILE_NAME = "_resources.mk"
+
+    Initialize(){
+        _assetListDict<Dictionary<string, List<List<string>>> = Dictionary.New()
+        AssetBuildStrategyManager.Initialize(".../build.xml")
+        [AssetBuildStrategyManager.GetBuildTarget():Android]
+        AssetBuildBuilder.Initialize(AssetBuildStrategyManager.GetBuildTarget())
+        _assetRecord<AssetRecord> = AssetRecordHelper.ReadAssetRecord(ASSET_RECORD_FILE_NAME) 
+        AssetRecordHelper.isRecordDirty = false
+
+        TemporaryAssetUtil.Instance.Reset();
+        MaterialJsonData.Clear();
+        AnimatorControllerJsonData.Clear();
+    }
+    
+    [返回Resources目录下所有路径:Assets/.....开头的目录]
+    GetResourcesAssetPathList(){
+        [F:/zhj/resource/trunk2/ArtProject/Assets]
+        assetPath<string> = Application.dataPath.Replace("\\", '/')
+
+        [<path tp project folder>/]
+        prefix<string> = assetPath.Replace("Assets", "")
+
+        [<path tp project folder>/Assets/Resources/]
+        folder<string> = string.Concat(assetPath, "/Resources/")
+
+        pathList<List<string>> = List.New()
+        folderList<List<string>> = EditorFileUtils.GetDirectoryFiles(folder)
+
+        foreach(filePath<string> in folderList){
+            [去掉prefix前缀]
+            path<string> = filePath.ReplaceFirst(prefix, "")
+            [过滤]
+            if path.Contains("Assets/Resources/data") 
+                || Path.GetExtension(path) == string.Empty
+                || path.Contains(TemporaryAssetUtil.RESOURCE_TEMP) then
+                continue
+            end
+            pathList.Add(path)
+        }
+        return pathList
+    }
+
+    BuildAssetList(list<List<string>, forceNotAddtiveBuild<bool:=false>){
+        Initialize()
+
+        tempAddtiveBuildSetting<var> = AssetBundleBuilder.IsAddtiveBuild
+
+        [真机打包不会传这个参数]
+        if forceNotAddtiveBuild then
+            if(AssetBundleBuilder.IsAddtiveBuild)//在配置打开了增量打包并且希望用原始打包策略时，保留原来的manifest
+                AssetBundleBuilder.IsKeepManifest = true;
+            AssetBundleBuilder.IsAddtiveBuild = false;
+        end
+
+        if EditorUserBuildSettings.activeBuildTarget != BuildTarget.ShandaloneWindows64 then
+            [移除Assets/Plugins/x86/, Assets/Plugins/x86_64/,文件夹]
+            RemoveToLua()
+        end
+
+        canBuildList<List<string> = List.New()
+
+        foreach(path<string> in list){
+            [跳过包含'test'的路径]
+            if path.ToLower().Contains("test") then continue end
+
+            if CanAssetBuild(path)==true and _assetListDict.ContainsKey(path)==false then
+                canBuildList.Add(path)
+            end
+        }
+
+        PrepareBuildAsset(canBuildList)
+
+        AssetDatabase.Refresh()
+
+        AssetProcessor.StartRecord()
+
+        foreach(path<string> in canBuildList){
+            AssetBundleBuilder.UpdateSetting(path)
+            pathListList<List<List<string>>> = ProcessAsset(path)
+            _assetListDict.Add(path, pathListList)
+        }
+
+        AssetProcessor.EndRecord()
+
+        AssetDatabase.SaveAssets()
+        AssetDatabase.Refresh()
+
+        processTime<var> = DateTime.Now
+        BuildAsset()
+        AssetDatabase.SaveAssets()
+        setBuildTime<var> = DataTime.Now
+        //////////////////////////////////
+
+    }
+
+    [不全]
+    BuildAsset(){
+        if (BuildEnvConfig.isBuildMobileRes)
+        {
+            _recordMD5BundlePathList.Clear();
+            string rootDir = PkgVerUtils.GetLasterVersionPath(null);   //输出根目录
+            filemd5Mgr = new Filemd5Mgr(rootDir);                      //打包发布资源，才产生文件md5列表
+        }
+        AssetBundleBuilder.BuildBegin();
+        foreach (string entryPath in _assetListDict.Keys)
+        {
+            List<BuildStrategyNode> nodeList = AssetBuildStrategyManager.GetAssetBuildStrategy(entryPath).buildStrategyNodeList;
+            List<string> bundlePathList = new List<string>();
+            for (int i = 0; i < nodeList.Count; i++)
+            {
+                List<string> nodePathList = BuildAssetBundle(entryPath, nodeList[i], _assetListDict[entryPath][i]);
+                AddWithoutDuplicate(nodePathList, bundlePathList);
+            }
+            CheckAssetDependenceChanged(entryPath, bundlePathList);
+            if (BuildEnvConfig.isBuildMobileRes) _recordMD5BundlePathList.AddRange(bundlePathList);
+        }
+        AssetBundleBuilder.BuildEnd();
+        if (BuildEnvConfig.isBuildMobileRes)
+        {
+            RecordMD5(_recordMD5BundlePathList);
+            filemd5Mgr.SaveFile();
+        }
+    }
+
+    ProcessAsset(path<string){
+        buildStrategy = AssetBuildStrategyManager.GetAssetBuildStrategy(path)
+        return AssetProcessor.ProcessAsset(path, buildStrategy)
+    }
+
+    PrepareBuildAsset(canBuildList<List<string>>){
+        AssetProcessor.PrepareBuildAsset(canBuildList)
+    }
+
+    CanAssetBuild(path<string>){
+        strategy<AssetBuildStrategy> = AssetBuildStrategyManager.GetAssetBuildStrategy(path)
+
+        return strategy != null
+    }
+
+    RemoveToLua(){
+        if (!Directory.Exists("temp_build/"))
+            Directory.CreateDirectory("temp_build/");
+        RemoveFolder("Assets/Plugins/x86/", "temp_build/x86/");
+        RemoveFolder("Assets/Plugins/x86_64/", "temp_build/x86_64/");
+        RemoveFile("Assets/Plugins/x86.meta", "temp_build/x86.meta");
+        RemoveFile("Assets/Plugins/x86_64.meta", "temp_build/x86_64.meta");
+        AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
+    }
+
+    RemoveFolder(string sourceFolder, string targetFolder){
+        if (Directory.Exists(sourceFolder))
+        {
+            if (Directory.Exists(targetFolder))
+            {
+                Directory.Delete(targetFolder, true);
+            }
+            Directory.Move(sourceFolder, targetFolder);
+        }
+    }
+
+    RemoveFile(string sourceFile, string targetFile){
+        if (File.Exists(sourceFile))
+        {
+            if (File.Exists(targetFile))
+            {
+                File.Delete(targetFile);
+            }
+            File.Move(sourceFile, targetFile);
+        }
+    }
+}
+
+TemporaryAssetUtil{
+    RESOURCES_TEMP<string> = "Resources_temp"
+    RESOURCES<string> = "Resources"
+
+    isSaveTempFile<bool>
+
+    [还不知用途的成员,可以看下RecordPath方法]
+    AssetPathSet
+    TempAssetPathSet
+    
+    [还不知用途]
+    _tempAssetDict
+
+    Reset(){
+        AssetPathSet<HashSet<string>> = HashSet.New()
+        TempAssetPathSet<HashSet<string>> = HashSet.New()
+        _tempAssetDict<Dictionary<string, Object>> = Dictionary.New()
+    }
+
+    [path:Assets/Resources/.../*.*]
+    [tempPath:Assets/Resources_Temp/.../*.*]
+    RecordPath(path<string>, tempPath<string>){
+        TempAssetPathSet.Add(tempPath)
+        AssetPathSet.Add(path)
+    }
+
+    [获取临时目录,Resources_temp]
+    GetTempAssetPath(path<string>){
+        if string.IsNullOrEmpty(path) then return path end
+
+        [Assets/Resources_temp/.../*.*]
+        tempFilePath<string> = path.Replace(RESOURCE, RESOURCES_TEMP)
+
+        [check if tempFilePath error]
+
+        folderPath<string> = Path.GetDirectoryName(AssetPathUtil.ConvertToFilePath(tempFilePath))
+
+        if folderPath not exists then CreateDirectory folderPath end
+
+        return tempFilePath
+    }
+
+    [path:Assets/Resources/.../*.*]
+    [将要处理的文件复制到临时文件]
+    CreateTempAssetOne(path<string>){
+        [Assets/Resources_Temp/.../*.*]
+        tempPath<string> = GetTempAssetPath(path)
+
+        if _tempAssetDict.ContainsKey(tempPath) then return end
+
+        [完整的路径Resources下]
+        sourceFilePath<string> = AssetPathUtil.ConvertToFilePath(path)
+        [完整的临时路径Resources_Temp]
+        targetFilePath<string> = AssetPathUtil.ConvertToFilePath(tempPath)
+
+        data<byte[]> = File.ReadAllBytes(sourceFilePath)
+
+        if File.Exists(targetFilePath) then File.Delete(targetFilePath) end
+
+        File.WriteAllBytes(targetFilePath, data)
+
+        RecordPath(path, tempPath)
+    }
+
+    [path:Assets/Resources/.../*.*]
+    CreateTempAssetTwo(path<string>){
+        [Assets/Resources_Temp/.../*.*]
+        tempPath<string = GetTempAssetPath(path)
+        
+        asset<Object> = AssetDatabase.LoadAssetAtPath(tempPath, typeof(Object))
+
+        EditorUtility.SetDirty(asset)
+        _tempAssetDict.Add(tempPath, asset)
+    }
+
+    CreateTempAsset(path<string>){
+        string tempPath = GetTempAssetPath(path);
+        if (_tempAssetDict.ContainsKey(tempPath) == true)
+        {
+            return _tempAssetDict[tempPath];
+        }
+        string sourceFilePath = AssetPathUtil.ConvertToFilePath(path);
+        string targetFilePath = AssetPathUtil.ConvertToFilePath(tempPath);
+        byte[] data = File.ReadAllBytes(sourceFilePath);
+        if (File.Exists(targetFilePath)) File.Delete(targetFilePath);
+        File.WriteAllBytes(targetFilePath, data);
+        AssetDatabase.Refresh();
+        Object asset = AssetDatabase.LoadAssetAtPath(tempPath, typeof(Object));
+        _tempAssetDict.Add(tempPath, asset);
+        return asset;
+    }
+}
+
+AssetBundleBuilder{
+
+    FONT_FILE_NAME = "MicrosoftYaHei";
+    SHADER_FOLDER_NAME = "Assets/Resources/Shader";
+    SHARED_FILE_NAME = "GUI_Shared.prefab";
+    L10N_FILE_NAME = "GUI_L10n.prefab";
+
+    IsAddtiveBuild<bool>
+
+    Initialize(buildTarget<string:Android>){
+        _builtAssetSet<HashSet<string>> = HashSet.New()
+        if buildTarget != null then
+            _buildTargetSetting = Enum.Parse(buildTarget)
+        end
+
+        _excludeFont<bool> = true;
+        _excludeShader<bool> = true;
+        _excludeShared<bool> = true;
+        _excludeL10n<bool> = true;
+
+        [猜想：修改当前设置的平台跟Unity的打包平台一致]
+        EditorUserBuildSettings.SwitchActiveBuildTarget(GetBuildTarget())
+    }
+
+    GetBuildTarget(){
+        [BuildTarget<Enum:Android>]
+        _buildTargetSetting
+    }
+
+    UpdateSetting(path<string>){
+        if path.Contains(FONT_FILE_NAME) then _excludeFont = false end
+        elseif path.Contains(SHADER_FOLDER_NAME) then _excludeShader = false end
+        elseif path.Contains(SHARED_FILE_NAME) then _excludeShared = false end
+        elseif path.Contains(L10N_FILE_NAME) then _excludeL10n = false end
+    }
+}
+
+AssetPathUtil{
+    TOKEN_ASSETS = "Assets"
+
+    GetOutputPath(assetPath<string:"_resources.mk"){
+        root<var> = GetOutputFolder()
+        return Path.Combine(root, assetPath)
+    }
+
+    GetOutputFolder(){
+        [true:"F:/wupeijian_client/export/cbt3/x.x.x.x/Resources"]
+        [false:F:/wupeijian_client/export/cbt3/]
+        string basePath = BuildEnvConfig.isBuildMobileRes ? AssetBuildStrategyManager.GetLasterVersionAssetBundleOutputRootPath() 
+        : AssetBuildStrategyManager.GetAssetBundleOutputRootPath();
+
+        string root = Path.GetFullPath(basePath);
+        if (Directory.Exists(root) == false)
+        {
+            Directory.CreateDirectory(root);
+        }
+        return root;
+    }
+
+    ConvertToFilePath(tempFilePath<string>){
+        return Application.dataPath.Replace(TOKEN_ASSETS, "") + path
+    }
+}
+
+
+[ThirdPartyPlugins.dll]
+FileUtils{
+    LoadFile(fileName<string>){
+
+    }
+}

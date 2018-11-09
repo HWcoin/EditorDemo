@@ -48,7 +48,13 @@
      <Compile Include="Assets\Editor\AssetBundle\AssetBundleCreator.cs" />
      <Compile Include="Assets\Editor\Custom\CustomSettings.cs" />
      <Compile Include="Assets\Editor\CustomUI\MyUI.cs" />
+     <Compile Include="Assets\Editor\Demo\FileTreeNode.cs" />
+     <Compile Include="Assets\Editor\Demo\FileTreeViewUtil.cs" />
      <Compile Include="Assets\Editor\EditorSettings.cs" />
+     <Compile Include="Assets\Editor\TestSprite.cs" />
+     <Compile Include="Assets\Editor\Utils\FileTreeView.cs" />
+     <Compile Include="Assets\Editor\Utils\FtpServerHelper.cs" />
+     <Compile Include="Assets\Editor\Utils\TreeNode.cs" />
      <Compile Include="Assets\ToLua\Editor\Extend\ToLua_LuaInterface_EventObject.cs" />
      <Compile Include="Assets\ToLua\Editor\Extend\ToLua_LuaInterface_LuaConstructor.cs" />
      <Compile Include="Assets\ToLua\Editor\Extend\ToLua_LuaInterface_LuaField.cs" />

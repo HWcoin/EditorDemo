@@ -1,0 +1,395 @@
+Processor{
+    BUILTIN_SHADER_PATH = "Resources/unit_builtin_extra"
+    POSTFIX_SHADER = ".shader"
+    DEFAULT_DIFFUSE = "Default-Diffuse"
+    DEFAULT_PARTICLE = "Default-Particle"
+    DEFAULT_UI_MATERIAL = "Default UI Material"
+
+    string Name;
+
+    protected string EliminateStartToken(string path)
+    {
+        return AssetPathUtil.EliminateStartToken(path);
+        /*
+         * 如果path类似：Assets/Resources/xxx, 返回xxx
+         * 如果path类似：Assets/Resources_temp/xxx, 返回xxx
+         * 否则返回：path
+        */
+    }
+
+    protected string ReplaceSlash(string path)
+    {
+        return AssetPathUtil.ReplaceSlash(path);
+        /*
+         * 将path中的 '/' 替换为 '$'
+        */
+    }
+
+    //代码中的注释：物理路径做key
+    protected virtual string GetPhysicalPathKey(string path, BuildStrategyNode node)
+    {
+        return AssetPathUtil.GetPhysicalPathKey(path, node);
+        /*
+         * Path.GetFileNameWithoutExtension(path)//获得文件名字，不带后缀
+         * GetPhysicalPathKey(string path, string name, BuildStrategyNode node)
+         * node.mode == FilePackageMode.MODE_FOLDER
+         *          
+         * node.mode == FilePackageMode.MODE_SELECTION
+         *
+         * else:
+         *
+         * 获得xxx.u物理路径
+        */
+        
+    }
+    //同上 Shader单独打包时Key为路径，批量打包时Key为Shader name
+    protected virtual string GetPhysicalPathKey(string path, string name, BuildStrategyNode node)
+    {
+        return AssetPathUtil.GetPhysicalPathKey(path, name, node);
+    }
+
+    //逻辑路径做Key
+    protected string GetPathKey(string path)
+    {
+        return EliminateStartToken(path);
+    }
+
+    protected virtual void AddToPathSet(HashSet<string> pathSet, string path)
+    {
+        pathSet.Add(path);
+    }
+
+    protected string GetMaterialPath(Material material)
+    {
+        if (material == null)
+        {
+            return string.Empty;
+        }
+        if (material.name.Contains(DEFAULT_DIFFUSE))
+        {
+            return DEFAULT_DIFFUSE;
+        }
+        if (material.name.Contains(DEFAULT_PARTICLE))
+        {
+            return DEFAULT_PARTICLE;
+        }
+        if (material.name.Contains(DEFAULT_UI_MATERIAL))
+        {
+            return DEFAULT_UI_MATERIAL;
+        }
+        string path = AssetDatabase.GetAssetPath(material);
+        if (Path.GetExtension(path) == string.Empty)
+        {
+            BuildLogger.Instance.Warin("发现不带.mat后缀的Material " + material);
+            return string.Empty;
+        }
+        return path;
+        return AssetPathUtil.GetPhysicalPathKey(path, node);
+        /*
+         * 处理material
+        */
+
+    }
+    //比较简单的判断是否是内建material
+    protected bool IsBuildinMaterial(Material material)
+    {
+        return IsBuildinMaterial(GetMaterialPath(material));
+    }
+
+    protected bool IsBuildinMaterial(string materialPath)
+    {
+        if (materialPath == DEFAULT_DIFFUSE
+            || materialPath == DEFAULT_PARTICLE
+            || materialPath == DEFAULT_UI_MATERIAL)
+        {
+            return true;
+        }
+        return false;
+    }
+    //获得shader的路径，如果为内置shader, 返回string.Empty
+    protected string GetShaderPath(Shader shader)
+    {
+        string path = AssetDatabase.GetAssetPath(shader);
+        //内置的Shader路径
+        if (path == BUILTIN_SHADER_PATH || path.ToLower().Contains(POSTFIX_SHADER) == false)
+        {
+            return string.Empty;
+        }
+        return path;
+    }
+    //获得GameObject路径
+    protected string GetGameObjectPath(GameObject gameObject)
+    {
+        string path = AssetDatabase.GetAssetPath(gameObject);
+        if (Path.GetExtension(path) == string.Empty)
+        {
+            return string.Empty;
+        }
+        return path;
+    }
+}
+
+
+AssetProcessor{
+    public const string FILE_UNITY = ".unity";
+    public const string FILE_PREFAB = ".prefab";
+    public const string FILE_MATERIAL = ".mat";
+    public const string FILE_CONTROLLER = ".controller";
+    public const string FILE_FONT = ".ttf";
+    public const string POST_FIX_JSON = "_shadow.json";
+
+#region static 
+    //应该都是AssetProcessor的子类
+    private static AssetProcessor _assetProcessor;
+    private static UnityAssetProcessor _unityProcessor;
+    private static GameObjectAssetProcessor _gameObjectProcessor;
+    private static MaterialAssetProcessor _materialProcessor;
+    private static AnimatorControllerAssetProcessor _animatorControllerProcessor;
+    private static FontAssetProcessor _fontProcessor;
+
+    //记录
+    static Dictionary<string, int> _processRecord = new Dictionary<string, int>();
+
+    //静态初始化
+    static AssetProcessor()
+    {
+        _assetProcessor = new AssetProcessor();
+
+        _unityProcessor = new UnityAssetProcessor();
+        _gameObjectProcessor = new GameObjectAssetProcessor();
+        _materialProcessor = new MaterialAssetProcessor();
+        _animatorControllerProcessor = new AnimatorControllerAssetProcessor();
+        _fontProcessor = new FontAssetProcessor();
+    }
+    //根据路径后缀名获取对应的AssetProcessor
+    public static AssetProcessor GetProcessor(string path)
+    {
+        string extension = Path.GetExtension(path.ToLower());
+        switch (extension)
+        {
+            case FILE_UNITY:
+                return _unityProcessor;
+            case FILE_PREFAB:
+                return _gameObjectProcessor;
+            case FILE_MATERIAL:
+                return _materialProcessor;
+            case FILE_CONTROLLER:
+                return _animatorControllerProcessor;
+            case FILE_FONT:
+                return _fontProcessor;
+        }
+        return _assetProcessor;
+    }
+
+    public static void StartRecord()
+    {
+        _processRecord.Clear();
+    }
+
+    public static void EndRecord()
+    {
+        foreach (var pair in _processRecord)
+        {
+            BuildLogger.Instance.Info("_processRecord:" + pair.Key + ":" + pair.Value);
+        }
+        _processRecord.Clear();
+    }
+
+    //记录处理时间
+    public static void ProcessRecord(string typen, int time)
+    {
+        if (!_processRecord.ContainsKey(typen)) _processRecord[typen] = 0;
+        _processRecord[typen] += time;
+    }
+
+    //处理资源，记下处理时间
+    public static List<List<string>> ProcessAsset(string path, AssetBuildStrategy buildStrategy)
+    {
+        var prt = Environment.TickCount;
+
+        var pro = GetProcessor(path);
+        var result = pro.Process(path, buildStrategy);
+
+        ProcessRecord(pro.GetType().ToString(), Environment.TickCount - prt);
+
+        return result;
+    }
+
+    //未完待续、、、
+     public static void PrepareBuildAsset(List<string> canBuildList)
+    {
+        var t1 = Environment.TickCount;
+        for (int i = 0; i < canBuildList.Count; i++)
+        {
+            string path = canBuildList[i];
+            GetProcessor(path).PrepareAssetOne(path);
+        }
+        AssetDatabase.Refresh();
+        for (int i = 0; i < canBuildList.Count; i++)
+        {
+            string path = canBuildList[i];
+            GetProcessor(path).PrepareAssetTwo(path);
+        }
+        Debug.Log("        PrepareBuildAsset +++++++++++++++  " + (Mathf.Abs(Environment.TickCount - t1)));
+    }
+
+#endregion
+
+    public List<List<string>> Process(string entryPath, AssetBuildStrategy buildStrategy)
+    {   
+        List<List<string>> pathListList = new List<List<string>>();
+        try{
+            List<string> dependAssetPathList = GetDependAssetPathList(entryPath);
+            HashSet<string> filteredPathSet = new HashSet<string>();
+            Object asset = GetAsset(entryPath);
+            int count = buildStrategy.buildStrategyNodeList.Count;
+            for(int i = 0; i < count; i++)
+            {
+                BuildStrategyNode node = buildStrategy.buildStrategyNodeList[i];
+                List<string> pathList;
+                if(string.IsNullOrEmpty(node.processor) == false)
+                {
+                    HashSet<string> pathSet = ApplyProcessor(asset, node);
+                    RemoveFilteredPath(filteredPathSet, pathSet);
+                    pathList = pathSet.ToList<string>();
+                    pathList.Sort(ComparePath);
+                }
+                else
+                {
+                    pathList = ApplyEmptyProcessor(dependAssetPathList, node);
+                }
+
+                RemoveFromDependPathList(dependAssetPathList, pathList);
+                AddToFilteredPathSet(filteredPathSet, pathList);
+                ReplaceWithTempAssetPath(pathList);
+                pathListList.Add(pathList);
+            }
+            FixPathForPrefab(entryPath, pathListList);
+        }
+        catch (Exception ex)
+        {
+            pathListList.Clear();
+            BuildLogger.Instance.Error("Asset Process [Fail] " + entryPath, ex);
+        }
+        return pathListList;
+    }
+
+
+
+
+    //获得路径path物体的所有依赖
+    public List<string> GetDependAssetPathList(string path)
+    {
+        List<string> dependAssetPathList = AssetDatabase.GetDependencies(new string[] { path }).ToList<string>();
+        return dependAssetPathList;
+    }
+    //why??? 虚方法，估计是子类实现
+    protected virtual Object GetAsset(string path)
+    {
+        return null;
+    }
+    //虚方法，估计是子类实现
+    protected virtual HashSet<string> ApplyProcessor(Object asset, BuildStrategyNode node)
+    {
+        BuildLogger.Instance.Warin("Prefab，Material，AnimatorController之外的资源，尚不支持资源分离打包");
+        return new HashSet<string>();
+    }
+
+    public void RemoveFilteredPath(HashSet<string> filterPathSet, HashSet<string> pathSet)
+    {
+        foreach(string path in filterPathSet)
+        {
+            if(pathSet.Contains(path) == true)
+            {
+                pathSet.Remove(path);
+            }
+        }
+    }
+
+    protected List<string> ApplyEmptyProcessor(List<string> dependPathList, BuildStrategyNode node)
+    {
+        return (from s in dependPathList where node.pattern.IsMatch(s) == true select s).ToList<string>();
+    }
+
+    //从dependAssetPathList中移除subList
+    public void RemoveFromDependPathList(List<string> dependAssetPathList, List<string> subList)
+    {
+        foreach(string s in subList)
+        {
+            dependAssetPathList.Remove(s);
+        }
+    }
+    //将pathList添加到filterPathSet
+    public void AddToFilteredPathSet(HashSet<string> filterPathSet, List<string> pathList)
+    {
+        foreach(string path in pathList)
+        {
+            filterPathSet.Add(path);
+        }
+    }
+
+    public void ReplaceWithTempAssetPath(List<string> assetPathList)
+    {
+        for(int i = 0; i < assetPathList.Count; i++)
+        {
+            if(TemporaryAssetUtil.Instance.AssetPathSet.Contains(assetPathList[i]) == true)
+            {
+                assetPathList[i] = TemporaryAssetUtil.Instance.GetTempAssetPath(assetPathList[i]);
+            }
+        }
+    }
+
+    //为了保证依赖的最后一项是主资源本身
+    protected void FixPathForPrefab(string entryPath, List<List<string>> pathListList)
+    {
+        if (!entryPath.EndsWith(FILE_PREFAB)) return;
+        string fileName = Path.GetFileName(entryPath);
+        for (int j = 0; j < pathListList.Count; j++)
+        {
+            var pathList = pathListList[j];
+            for (int idx = pathList.Count - 1; idx >= 0; idx--)
+            {
+                string path = pathList[idx];
+                if (path.EndsWith(FILE_PREFAB) && !path.EndsWith(TemporaryAssetUtil.FBX_PREFAB_POSTFIX) && fileName != Path.GetFileName(path))
+                {
+                    Debug.LogError("剔除错误引用：" + entryPath + ":" + path);
+                    pathList.RemoveAt(idx);
+                }
+            }
+        }
+    }
+    protected virtual void PrepareAssetOne(string path)
+    {
+    }
+
+    protected virtual void PrepareAssetTwo(string path)
+    {
+    }
+}
+
+
+FontAssetProcessor{
+    public FontAssetProcessor()
+    {
+    }
+
+    protected override Object GetAsset(string path)
+    {
+        return AssetDatabase.LoadAssetAtPath(path, typeof(Font));
+    }
+
+    protected override HashSet<string> ApplyProcessor(Object asset, BuildStrategyNode node)
+    {
+        string path = AssetDatabase.GetAssetPath(asset);
+        string[] dependPaths = AssetDatabase.GetDependencies(new string[] { path });
+        HashSet<string> result = new HashSet<string>();
+        foreach (string s in dependPaths)
+        {
+            if (node.pattern.IsMatch(s) == true && s.Contains("_unicode") == true)
+            {
+                result.Add(s);
+            }
+        }
+        return result;
+    }
+}

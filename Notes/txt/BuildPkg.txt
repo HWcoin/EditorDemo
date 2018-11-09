@@ -1,0 +1,619 @@
+﻿Tips[
+    打包之前检查：
+    [.../Assets/Resources/Scene/Mesh_Rule]:选中,在Inspector中将Tangents,Normals设置为None,Apply
+
+    [本地对比文件：对比版本是不是需要更新补丁]
+    [.../Assets/Resources/VersionInfo]
+    
+    [cfg.xml]
+    [本地的一份配置文件]
+    [common.xml:更新补丁信息]
+    [servers.xml:服务器列表]
+
+    [common.xml文件]
+    [ResourceVersion:服务器最新补丁包版本信息, 跟本地VersionInfo对比]
+    [PackageUrl:下载补丁的Url]
+    [serverList:服务器列表]
+
+    --GameLoader更新
+    更新的包放到testapp/gameloader
+    common.xml 修改gameloader版本号
+    GameLoaderVersion GameLoaderMd5 GameLoaderUrl
+
+    补丁更往的目录
+    <web_cfg_dir>G:/cbt5/web/cfg/cdn/adr_cn/testpp/</web_cfg_dir>
+    gameloader更往的目录
+    RuntimeProject/LocalConfig.xml
+
+    app本地有个Config文件夹，可将配置文件放到里面测试
+
+    //如何更新GameLoader
+    Artproject Build/pkg/Build Update GameLoader
+    RuntimeProject Update/UpdateGameLoader
+
+]
+
+GameLoaderPath = "/Resources/bytes$gameloader.bytes.u"
+
+BuildPkg{
+    ["Build/Pkg/01、UpVersion"]
+    UpVersion(rootDir<string:null>, isInit<bool:true>){
+        if (isInit) AssetBuildStrategyManager.Initialize(build.xml)
+
+        lasterVersion<string> = PkgVerUtils.GetLasterVersion(rootDir)
+
+        [假如当前最大为0.0.0.1, 获得upVer -> 0.0.0.2]
+        lastIndex<int> = lasterVersion.LastIndexOf(".")
+        str<string> = lasterVersion.Substring(lastIndex+1)
+        upVer<string> = (str.tonumber() + 1).tostring()
+        upVer = lasterVersion.Substring(0, lastIndex+1) + upVer
+
+        upVerFolder = PkgVerUtils.GetVersionPath(upVer, rootDir)
+
+        [不拷贝的文件列表]
+        excuFiles = {
+            {
+                "firstExport.zip"
+            },
+            {
+                "Pkg"            
+            }
+        }
+
+        [到这里还未创建upVerFolder目录]
+
+        [拷贝文件从x.x.x.x -> x.x.x.x+1]
+        EditorFileUtils.DirectoryCopy(PkgVerUtils.GetVersionPath(lasterVersion, rootDir), upVerFolder, true, true, excuFiles)
+    }
+
+    ["Build/Pkg/02、Build Resources"]
+    BuildResources(){
+        AssetBuildStrategyManager.Initialize(".../build.xml")
+        list<List<string> = ExportAssetbundle.GetResourcesAssetPathList()
+        ExportAssetbundle.BuildAssetList(list)
+    }
+
+    ["Build/Pkg/03、Build Data"]
+    BuildData(){
+            do
+            try:
+                tempVar<string> = null
+                sourcePath<string> = null
+                targetPath<string> = null
+                AssetBuildStrategyManager.Initialize("build.xml")
+                beginTime = Environment.TickCount
+                lasterFolder<string> = PkgVerUtils.GetLasterVersionPath(null);
+
+                ['../Assets/Resources/data/']
+                sourceFolder<string> = string.Concat(Application.dataPath.Replace("\\", "/"), "/Resources/data/")
+                [../Assets/Resources/Data/*.*]
+                pathList<List<string>> = EditorFileUtils.GetDirectoryFiles(sourceFolder)
+
+                for(i<int>=0; i < pathList.Count; i++){
+                    sourcePath = pathList[i]
+                    tempVar = sourcePath.Replace(sourceFolder, "")
+
+                    if (tempVar.StartsWidth("xml/")) continue;
+                    if (tempVar.StartsWidth("block_maps_server/")) continue;
+                    if (tempVar.StartsWidth("dynamic_maps/")) continue;
+
+                    targetPath = string.Concat(lasterFolder, "/data/", tempVar)
+                    if (!Directory.Exists(Path.GetDirectoryName(targetPath)))
+                        Directory.CreateDirectory(Path.GetDirectoryName(targetPath))
+
+                    if (false && Path.GetExtension(sourcePath).ToLower()==".pbuf"){
+                    //压缩pbuf
+                        ExportZipFile(sourcePath, Path.GetDirectoryName(targetPath) + "/", Path.GetFileName(sourcePath), false);
+                    }else{
+                        File.Copy(sourcePath, targetPath, true)
+                    }
+                }
+                Log()
+            catch:
+                Log()
+            end
+        }
+
+
+
+        [MenuItem("Build/Pkg/03.5、Build LUA")]
+        BuildLua(){
+            try
+            {
+                tempVar<string> = null;
+                sourcePath<string> = null;
+                targetPath<string> = null;
+
+                AssetBuildStrategyManager.Initialize(ExportAssetbundle.SETTING_PATH);
+                BuildLogger.Instance.Debug("Build Data [Start]");
+                beginTime<int> = Environment.TickCount;
+                lasterFolder<string> = PkgVerUtils.GetLasterVersionPath(null);
+
+                sourceFolder<string> = BuildEnvConfig.RuntimeResource + "Lua/";//string.Concat(Application.dataPath.Replace("\\", "/"), "/Resources/Lua/");
+                BuildLogger.Instance.Debug("luaFolder:" + sourceFolder);
+                pathList<List<string>> = EditorFileUtils.GetDirectoryFiles(sourceFolder);
+
+                for (i<int> = 0; i < pathList.Count; i++)
+                {
+                    sourcePath = pathList[i];
+                    tempVar = sourcePath.Replace(sourceFolder, "");
+                    if (tempVar.StartsWith("Lua/")) continue;
+                    targetPath = string.Concat(lasterFolder, "/Lua/", tempVar);
+
+                    if (!Directory.Exists(Path.GetDirectoryName(targetPath))) Directory.CreateDirectory(Path.GetDirectoryName(targetPath));
+                    //BuildLogger.instance.debug(Path.GetExtension(sourcePath));
+                    //if (Path.GetExtension(sourcePath).ToLower() == ".pbuf")
+                    //{//对.pbuf进行压缩
+                    //    ExportZipFile(sourcePath, Path.GetDirectoryName(targetPath) + "/", Path.GetFileName(sourcePath), false);
+                    //}
+                    //else
+                    //{
+                    //File.Copy(sourcePath, targetPath, true);
+                    DisabledDebugCode(sourcePath, targetPath);
+                    //}
+                }
+                BuildLogger.Instance.Debug(string.Format("Export Lua [OK] cost:{0}", BuildLogger.Instance.FormatTime(Environment.TickCount - beginTime)));
+            }
+            catch (Exception ex)
+            {
+                BuildLogger.Instance.Error("Build Data [Fail]", ex);
+            }
+        }
+
+
+        [MenuItem("Build/Pkg/04、Build Libs")]
+        BuildLibs()
+        {
+            #if !UNITY_IPHONE
+            //try
+            //{
+            RebuildAllLib();
+            RebuildGameLoader(false);
+            DllExportSetVo dllExportSetVo = null;
+            int beginTime = Environment.TickCount;
+            string outputFolder = string.Concat(PkgVerUtils.GetLasterVersionPath(null), "/libs/");
+            for (int i = 0; i < BuildEnvConfig.libsList.Count; i++)
+            {
+                dllExportSetVo = BuildEnvConfig.libsList[i];
+                if (dllExportSetVo.isPkgFile)
+                {//需要合并到pkg中
+                    ExportZipFile(dllExportSetVo.path, outputFolder, Path.GetFileName(dllExportSetVo.path), true);
+                }
+                //BuildLogger.instance.debug(string.Format("sourcePath:{0}", sourcePath));
+            }
+            BuildLogger.Instance.Debug(string.Format("Export Libs [OK] cost:{0}", BuildLogger.Instance.FormatTime(Environment.TickCount - beginTime)));
+            //}
+            //catch (Exception ex)
+            //{
+            //    BuildLogger.instance.error("Export Libs [Fail]", ex);
+            //}
+            #endif
+        }
+
+        [MenuItem("Build/Pkg/05、Build First Pkg File")]
+        BuildFirstPkg(){
+            BuildFirstPkg(null, true);
+        }
+
+
+        [MenuItem("Build/Pkg/05、Build Update Pkg File")]
+        BuildUpdatePkg()
+        {
+            BuildUpdatePkg(null, null, true);
+        }
+
+
+
+------------------------------------------build libs
+        RebuildAllLib(){
+            BuildEnvConfig.InitConfig();
+            DllExportSetVo dllExportSetVo = null;
+            for (int i = 0; i < BuildEnvConfig.libsList.Count; i++)
+            {
+                //需要重新编译
+                dllExportSetVo = BuildEnvConfig.libsList[i];
+                if (dllExportSetVo.isRebuild) RebuildLib(dllExportSetVo.csprojPath, i == 0);
+            }
+        }
+
+        RebuildLib(string libPath, bool isPlatformLog){
+            
+            BuildLogger.Instance.Debug("RebuildBil:" + libPath);
+            beginTime<int> = Environment.TickCount;
+            AssetBuildStrategyManager.Initialize(ExportAssetbundle.SETTING_PATH);
+            batCmdPath<string> = Application.dataPath.Replace("Assets", "") + "bat/一键生成解决方案.bat";   //批处理文件路径
+            platform<string> = "UNITY_EDITOR";
+            curTarget<BuildTarget> = BuildEnvConfig.GetBuildTarget();
+
+            if (curTarget == BuildTarget.Android) platform = "UNITY_ANDROID";
+            if (curTarget == BuildTarget.iOS) platform = "UNITY_IPHONE";
+            if (curTarget == BuildTarget.StandaloneWindows64) platform = "UNITY_STANDALONE_WIN";
+            if (isPlatformLog) BuildLogger.Instance.Debug("打包平台 curBuildTarget:" + curTarget + ",platform:" + platform);
+            
+            args<string> = string.Concat(libPath, ",", platform);
+            Process process = new Process();
+            process.StartInfo.FileName = batCmdPath;
+            process.StartInfo.UseShellExecute = false;
+            process.StartInfo.RedirectStandardOutput = true;
+            process.StartInfo.Arguments = args;
+            //Process process = Process.Start(batCmdPath, args);
+            var isBuildFailure = false;
+            var sb = new StringBuilder();
+            process.OutputDataReceived += new DataReceivedEventHandler((sender, e) =>
+            {
+                // Prepend line numbers to each line of the output.
+                if (!String.IsNullOrEmpty(e.Data))
+                {
+                    if (e.Data.Contains("生成失败"))
+                    {
+                        isBuildFailure = true;
+                        //BuildLogger.instance.debug(e.Data);
+                    }
+                    sb.Append(e.Data);
+                }
+            });
+            process.Start();
+            process.BeginOutputReadLine();
+            process.WaitForExit();
+            if (isBuildFailure)
+            {
+                BuildLogger.Instance.Error(sb.ToString());
+                RTSNotifier.SendNotify("打包被中断%0D%0A编译失败：" + libPath);
+                throw new Exception(string.Format("编译DLL:{0} [Failure] cost:{0}", libPath, BuildLogger.Instance.FormatTime(Environment.TickCount - beginTime)));
+                //BuildLogger.instance.debug();
+            }
+            else
+            {
+                BuildLogger.Instance.Debug(string.Format("编译DLL:{0} [OK] cost:{0}", libPath, BuildLogger.Instance.FormatTime(Environment.TickCount - beginTime)));
+            }
+        }
+
+
+
+        RebuildGameLoader(bool isRebulid, bool isCopyToPub = true, bool isBuildTest = false){
+            
+            if (isRebulid) AssetBuildStrategyManager.Initialize(ExportAssetbundle.SETTING_PATH);
+            DllExportSetVo vo = BuildEnvConfig.GetGameLoaderSetVo();
+            if (vo != null && !string.IsNullOrEmpty(vo.path))
+            {
+                //A-1、编译解决方案
+                if (isRebulid) RebuildLib(vo.csprojPath, true);
+                //A-2、拷贝GameLoader.dll到ArtProject/Assets/Resources/Bytes并重名为GameLoader.bytes
+                string fileName = Path.GetFileNameWithoutExtension(vo.path);
+                string targetFolder = string.Concat(Application.dataPath, "/Resources/Bytes/");
+                string targetPath = string.Concat(targetFolder, fileName, ".bytes");
+                if (!Directory.Exists(targetFolder)) Directory.CreateDirectory(targetFolder);
+                if (File.Exists(targetPath)) File.Delete(targetPath);
+                File.Copy(vo.path, targetPath);
+                var fileData = FileUtils.LoadByteFile(targetPath);
+                var enCryptData = DESCrypto.Encrypt(fileData, KeyUtils.GetResNumber());
+                FileUtils.SaveBytes(targetPath, enCryptData);
+                AssetDatabase.Refresh();
+
+                //A-3、打包GameLoader.bytes
+                int beginTime = Environment.TickCount;
+                string lasterFolder = PkgVerUtils.GetLasterVersionPath(null);
+
+                if(isBuildTest)
+                {
+                    string verPath = string.Concat(lasterFolder, "/bytes$gameloader.bytes.u");
+                    BuildLogger.Instance.Debug("测试生成GameLoader targetPath:" + verPath);
+                    File.Copy(targetPath, verPath, true);
+                    return verPath;
+                }
+
+                if (EditorUserBuildSettings.activeBuildTarget == BuildTarget.StandaloneWindows ||
+                    EditorUserBuildSettings.activeBuildTarget == BuildTarget.StandaloneWindows64)
+                {//PC端，GameLoader不打成assetbundle,只重名名为 bytes$gameloader.bytes.u
+                    string verPath = string.Concat(lasterFolder, "/Resources/bytes$gameloader.bytes.u");
+                    BuildLogger.Instance.Debug("[PC平台]拷贝GameLoader并重命名 targetPath:" + verPath);
+                    File.Copy(vo.path, verPath, true);
+                }
+                else
+                {
+                    string assetPath = targetPath.ReplaceFirst(Application.dataPath, "Assets");
+                    List<string> list = new List<string>();
+                    list.Add(assetPath);
+                    ExportAssetbundle.BuildAssetList(list, true);
+                }
+
+                string sourcePath = string.Concat(lasterFolder, GameLoaderPath);
+                //更新版本文件
+                var lastGameLoaderVersion = SyncCommonFileMgr.GetCommonContent("GameLoaderVersion");
+                var newGameLoaderVersion = lastGameLoaderVersion;
+                if(isRebulid)
+                {
+                    newGameLoaderVersion = string.IsNullOrEmpty(lastGameLoaderVersion) ? "" : new VersionCodeInfo(lastGameLoaderVersion).GetUpperVersion();
+                }
+                
+                SyncCommonFileMgr.SetCommonContent("GameLoaderVersion", newGameLoaderVersion);
+                if (isCopyToPub)
+                {
+                    //A-4、拷贝到发布工程
+                    targetPath = string.Concat(BuildEnvConfig.publishStreamAssetDir, sourcePath.ReplaceFirst(lasterFolder, ""));
+                    targetFolder = Path.GetDirectoryName(targetPath);
+                    BuildLogger.Instance.Debug("gameloader targepath:" + targetPath);
+                    if (Directory.Exists(targetFolder))
+                    {
+                        File.Copy(sourcePath, targetPath, true);
+                        BuildLogger.Instance.Debug(string.Format("GameLoader已经拷贝:{0}到发布工程下:{1}", sourcePath, targetPath));
+                        BuildLogger.Instance.Debug(string.Format("GameLoader [OK] cost:{0}", BuildLogger.Instance.FormatTime(Environment.TickCount - beginTime)));
+                        var pubTargetPath = BuildEnvConfig.publishStreamAssetDir + "../../StreamingAssetGameLoaderVersion.txt";
+                        FileUtils.SaveText(pubTargetPath, newGameLoaderVersion);
+                    }
+                    else
+                    {
+                        BuildLogger.Instance.Error(string.Format("找不到发布工程目录:{0},无法拷贝bytes$gameloader.bytes.u", targetFolder));
+                    }
+                }
+                return sourcePath;
+            }
+            else
+            {
+                BuildLogger.Instance.Debug("找不到GameLoader.dll在BuildEnvConfig.xml中的打包设置,操作失败！");
+            }
+            return "";
+        }
+
+        ExportZipFile(string srcFilePath, string outputFolder, string outputName, bool iEnsDes = true)
+        {
+            string zipPath = string.Concat(Path.GetDirectoryName(srcFilePath), "/", Path.GetFileNameWithoutExtension(srcFilePath), ".zip");
+            string sourceFolder = string.Concat(Path.GetDirectoryName(srcFilePath), "/temp/");      //存放zip文件的临时目录
+            string tempPath = string.Concat(sourceFolder, Path.GetFileName(srcFilePath));
+
+            if (Directory.Exists(sourceFolder)) Directory.Delete(sourceFolder, true);
+            if (!Directory.Exists(outputFolder)) Directory.CreateDirectory(outputFolder);
+            if (!Directory.Exists(sourceFolder)) Directory.CreateDirectory(sourceFolder);
+            File.Copy(srcFilePath, tempPath, true);                                                 //把要压缩的文件放到临时目录temp,用完删除
+            PkgFileUtils.PackFiles(zipPath, sourceFolder, Path.GetFileName(zipPath));
+            if (Directory.Exists(sourceFolder)) Directory.Delete(sourceFolder, true);               //压缩完成，删除临时目录temp 
+
+            if (iEnsDes)
+            {//Des加密
+                byte[] libData = FileUtils.LoadByteFile(zipPath);
+                byte[] encryptData = DESCrypto.Encrypt(libData, KeyUtils.GetResNumber());
+                FileUtils.SaveBytes(Path.Combine(outputFolder, outputName), encryptData);
+                if (File.Exists(zipPath)) File.Delete(zipPath);
+            }
+            else
+            {
+                File.Copy(zipPath, Path.Combine(outputFolder, outputName), true);
+                if (File.Exists(zipPath)) File.Delete(zipPath);
+            }
+            BuildLogger.Instance.Debug(string.Format("zip文件:{0},已生成成功并输出到:{1}", Path.GetFileName(srcFilePath), outputFolder));
+        }
+
+
+
+        BuildFirstPkg(string rootDir, bool isInit = false){
+            try
+            {
+                int beginTime = Environment.TickCount;
+                AssetBuildStrategyManager.Initialize(ExportAssetbundle.SETTING_PATH);
+                BuildLogger.Instance.Debug(string.Format("导出First Pkg[Start]"));
+
+                string lasterFolder = PkgVerUtils.GetLasterVersionPath(rootDir);                     //最新版本号目录
+                string pkgPath = string.Concat(lasterFolder, "/", MogoFileSystem.FILE_NAME);         //生成pkg文件的路径 MogoFileSystem.FILE_NAME = pkg
+                string zipPath = string.Concat(lasterFolder, "/firstExport.zip");                    //对tempDir目录压缩后的压缩文件路径
+
+
+                if (string.IsNullOrEmpty(lasterFolder))
+                {
+                    BuildLogger.Instance.Error(string.Format("找不到最新版本目录:{0},操作失败,将退出！", lasterFolder));
+                    return;
+                }
+
+                //A-1、搜索需要打包的文件
+                SerarchUpdate(true, lasterFolder, zipPath, pkgPath, null);
+                //A-3、生成pkg文件索引信息
+                if (File.Exists(pkgPath)) File.Delete(pkgPath);
+                MogoFileSystem.Instance.FileFullName = pkgPath;
+                MogoFileSystem.Instance.Init(pkgPath);
+                PkgFileUtils.DecompressToMogoFile(zipPath);
+                BuildLogger.Instance.Debug(string.Format("导出First Pkg[OK],cost:{0}", BuildLogger.Instance.FormatTime(Environment.TickCount - beginTime)));
+            }
+            catch (Exception ex)
+            {
+                BuildLogger.Instance.Error("First Pkg [Fail]", ex);
+            }
+            finally
+            {
+                //最终清除MogoFileSystem缓存
+                MogoFileSystem.Instance.Clear();
+            }
+        }
+
+
+
+        BuildUpdatePkg(string rootDir, string platformName = null, bool isInit = false)
+        {
+            try
+            {
+                int beginTime = Environment.TickCount;
+                if (isInit) AssetBuildStrategyManager.Initialize(ExportAssetbundle.SETTING_PATH);
+                BuildLogger.Instance.Debug(string.Format("Build Update Pkg [Start]"));
+                string lasterVersion = PkgVerUtils.GetLasterVersion(rootDir);                                                                                       //最新版本号 
+                string lasterFolder = PkgVerUtils.GetLasterVersionPath(rootDir);                                                                                    //最新版本号目录
+                string secendVersion = PkgVerUtils.GetsScondVersion(lasterVersion, rootDir);                                                                        //第二新版本号
+                string pkgOutputDir = string.IsNullOrEmpty(rootDir) ? BuildEnvConfig.artPkgoutputDir : BuildEnvConfig.platformPkgoutputDir + platformName + "/";    //pkg存放目录
+                string zipPath = string.Concat(pkgOutputDir, "package", secendVersion, "-", lasterVersion, ".pkg");                                                 //对tempDir目录压缩后的压缩文件路径
+                if (string.IsNullOrEmpty(secendVersion) || string.IsNullOrEmpty(lasterVersion))
+                {
+                    BuildLogger.Instance.Error(string.Format("在目录:{0}下找不到版本{0}的前一个版本目录:{1},操作失败,将退出！", rootDir, lasterVersion, secendVersion));
+                    return;
+                }
+
+                //A-1、搜集需要打包的文件
+                SerarchUpdate(false, lasterFolder, zipPath, null, secendVersion);
+                //A-2、生成文件的md5并写入packagemd5.xml文件
+                if (File.Exists(zipPath))
+                {
+                    BuildLogger.Instance.Debug(string.Format("开始写入文件:{0}md5值", zipPath));
+                    Packagemd5Mgr packagemd5Mgr = new Packagemd5Mgr(pkgOutputDir);
+                    packagemd5Mgr.Record(zipPath);
+                    packagemd5Mgr.SaveFile();
+
+                    //把补丁pkg,packagemd5.xml,loginnotice.xml,GameLoader.bytes.u文件拷贝到发版目录WebCfg下
+                    SyncCommonFileMgr.UpdatePkgInfoAtCommonFile(zipPath, packagemd5Mgr.GetPackagemd5Path());
+                }
+                //SyncCommonFileMgr.SyncLoginNoticeFileToWebcfgDir();
+                //SyncCommonFileMgr.UpdateGameLoaderInfoAtCommonFile(string.Concat(lasterFolder, GameLoaderPath));
+                BuildLogger.Instance.Debug(string.Format("导出Update Pkg[OK],cost:{0}", BuildLogger.Instance.FormatTime(Environment.TickCount - beginTime)));
+            }
+            catch (Exception ex)
+            {
+                BuildLogger.Instance.Error("Update Pkg [Fail]", ex);
+            }
+        }
+}
+
+AssetBuildStrategyManager{
+    Initialize(path:Application.dataPath + "/Configs/build.xml"){
+        _assetStrategyDict<Dictionary:string, AssetBuildStrategy>;
+        _defineStrategyDict<Dictionary:string, AssetBuildStrategy>;
+
+        [所有变量都从build.xml获取, 会被BuildEnvConfig覆盖]
+        UpdateConfigParams(output, buildTarget, saveTempFile, build, addtive, uncompressed)
+
+        [将配置文件的子节点封装成AssetBuildStrategy类]
+        _defineStrategyDict.Add(key=strategy.name, AssetBuildStrategy:Instance)
+
+        BuildEnvConfig.InitConfig()
+    }
+
+    [这个类保存了一些变量,需要关注TemporyAssetUtil, AssetBundleBuilder类]
+    UpdateConfigParams(output, buildTarget, saveTempFile, build, addtive, uncompressed){
+        _outputRootPath = output
+        _buildTarget = buildTarget
+
+        TemporaryAssetUtil.isSaveTempFile = saveTempFile
+        AssetBundleBuilder.IsActualBuild = build
+        AssetBundleBuilder.IsAddtiveBuild = addtive
+        AssetBundleBuilder.Uncompressed = uncompressed
+    }
+
+    [获得资源输出根目录路径]
+    [eg:"F:/wupeijian_client/export/cbt3/"]
+    GetAssetBundleOutputRootPath(){
+        if !Directory.Exists(_outputRootPath) then Directory.CreateDirectory(_outputRootPath) end
+        return _outputRootPath
+    }
+
+    [返回："F:/wupeijian_client/export/cbt3/x.x.x.x/Resources"]
+    GetLasterVersionAssetBundleOutputRootPath(){
+
+        ["F:/wupeijian_client/export/cbt3/x.x.x.x/Resources"]
+        path<string> = string.Concat(PkgVerUtils.GetLasterVersionPath(null), "/Resources/");
+        if (!Directory.Exists(path)) Directory.CreateDirectory(path);
+        return path;
+    }
+
+    GetBuildTarget(){
+        return _buildTarget
+    }
+
+    [稍后查看匹配规则:返回跟当前资源相关的AssetBuildStrategy]
+    GetAssetBuildStrategy(){
+    }
+}
+
+BuildEnvConfig{
+    InitConfig(){
+        SETTING_PATH = "../BuildEnvConfig.xml"
+
+        [<log outWay="7" outputDir="E:/buildlog/" logLevel="63" />]
+        SecurityElement logNode = rootNode.Node("log")
+        outWay = Enum(logNode.Attribute("outWay"))
+        logLevel = Enum(logNode.Attribute("logLevel"))
+        loggerDir = logNode.Attribute("outputDir")
+
+        InitLibsList(rootNode.Node("libs"))
+        InitPlatform(rootNode.Node("platform"))
+
+        [isBuildMobileRes = "0"]
+        isBuildMobileRes = rootNode.Attribute("isBuildMobileRes").Equals("1"))
+
+        [<pkgOutoutDir>E:/Project/Package/</pkgOutoutDir>]
+        artPkgoutputDir = rootNode.Node("pkgOutoutDir").Text
+
+        [<RuntimeResource>E:/Project/xgame/src/client/RuntimeResource/</RuntimeResource>]
+        RuntimeResource = rootNode.Node("RuntimeResource").Text
+
+        [<publishStreamAssetDir>E:/Project/xgame/src/client/RuntimeProject/Assets/StreamingAssets/</publishStreamAssetDir>]
+        publishStreamAssetDir = rootNode.Node("publishStreamAssetDir").Text
+
+        [<web_cfg_dir>E:/Project/cfg/sdk_cfg/</web_cfg_dir>]
+        webCfgDir = rootNode.Node("web_cfg_dir").Text
+
+        [真机打包:更新了打包参数，如果是真机打包最后以这里为主]
+        if (isBuildMobileRes) then
+            envBuildTarget = rootNode.Attribute("buildTarget")
+            output<string> = rootNode.Attribute("output")
+            buildTarget<string> = rootNode.Attribute("buildTarget")
+            saveTempFile<string> = rootNode.Attribute("saveTempFile")
+            build = rootNode.Attribute("build")
+            addtive = rootNode.Attribute("addtive")
+            uncompressed = rootNode.Attribute("uncompressed")
+            AssetBuildStrategyManager.UpdateConfigParams(output, buildTarget, saveTempFile, build, addtive, uncompressed)
+
+        end
+    }
+
+    [
+        <libs folder="E:/Project/xgame/src/client/GameCode/Lib/">
+            <item isRebuild="0" isPkgFile="1" dllName="GeneratedLib/SerializableData.dll"/>
+            <item isRebuild="0" isPkgFile="1" dllName="GeneratedLib/SerializableDataSerializer.dll"/>
+            <item isRebuild="0" isPkgFile="1" dllName="GeneratedLib/XMLDefine.dll"/>
+            <item isRebuild="0" isPkgFile="1" dllName="GeneratedLib/XMLManager.dll"/>
+            <item isRebuild="0" isPkgFile="1" dllName="GeneratedLib/XMLSerializer.dll"/>
+
+            <item isRebuild="1" isPkgFile="1" dllName="GameResource.dll"/>
+            <item isRebuild="0" isPkgFile="1" dllName="UIExtension.dll"/>
+            <item isRebuild="0" isPkgFile="1" dllName="ACTSystem.dll"/>
+            <item isRebuild="1" isPkgFile="1" dllName="MogoEngine.dll"/>
+            <item isRebuild="1" isPkgFile="0" dllName="GameLoader.dll"/>
+
+            <item isRebuild="1" isPkgFile="1" dllName="GameMain.dll"/>
+            <item isRebuild="1" isPkgFile="1" dllName="ToLua.dll"/>
+            <item isRebuild="0" isPkgFile="1" dllName="ToLuaWrap.dll"/>
+        </libs>
+    ]
+    InitLibsList(SecurityElement("libs")){
+        libsList = List<DllExportSetVo>()
+        libsList = {
+            {
+                folder = item.Attribute("folder"),
+                dllName = item.Attribute("dllName"),
+                isRebuild = item.Attribute("isRebuild"),
+                isPkgFile = item.Attribute("isPkgFile")
+            },
+            ...
+        }
+    }
+
+
+    [
+        <platform outputDir="E:/Project/sdk/android/" pkgOutputDir="E:/Project/sdk/out/">
+            <item name="4399" isUse="1" isExport="1"/>
+            <item name="uc"   isUse="1" isExport="1"/>
+            <item name="pptv" isUse="1" isExport="1"/>
+            <item name="nx"   isUse="1" isExport="1"/>
+            <item name="nb"   isUse="1" isExport="1"/>
+        </platform>
+    ]
+    InitPlatform(SecurityElement("platform")){
+        outputDir = node.Attribute("outputDir")
+        platformPkgoutputDir = node.Attribute("pkgOutputDir")
+        platformList = List<PlatformSetVo>
+        platformList = {
+            {
+                outputDir,
+                name = item.Attribute("name"),
+                isExport = item.Attribute("isExport")
+            },
+            ...
+        }where(item.Attribute("isUse").Equals("1"))
+    }
+}
+
+

@@ -1,0 +1,964 @@
+ToLuaExport{
+        public enum MetaOp
+        {
+            None = 0,
+            Add = 1,
+            Sub = 2,
+            Mul = 4,
+            Div = 8,
+            Eq = 16,
+            Neg = 32,
+            ToStr = 64,
+            ALL = Add | Sub | Mul | Div | Eq | Neg | ToStr,
+        }
+
+        public enum ObjAmbig
+        {
+            None = 0, 
+            U3dObj = 1,
+            NetObj = 2,
+            All = 3
+        }
+
+        //内部类
+        public class DelegateType
+        {
+            public string name;
+            public Type type;
+            public string abr = null;
+
+            public string strType = "";
+
+            public DelegateType(Type t)
+            {
+                type = t;
+                strType = ToLuaExport.GetTypeStr(t);                
+                name = ToLuaExport.ConvertToLibSign(strType);        
+            }
+
+            public DelegateType SetAbrName(string str)
+            {
+                abr = str;
+                return this;
+            }
+        }
+
+        //#############################################################################
+        public static string className = string.Empty;
+        public static Type type = null;
+        public static Type baseType = null;
+            
+        public static bool isStaticClass = true;    
+
+        static HashSet<string> usingList = new HashSet<string>();
+        static MetaOp op = MetaOp.None;    
+        static StringBuilder sb = null;
+        static List<MethodInfo> methods = new List<MethodInfo>();
+        static Dictionary<string, int> nameCounter = new Dictionary<string, int>();
+        static FieldInfo[] fields = null;
+        static PropertyInfo[] props = null;    
+        static List<PropertyInfo> propList = new List<PropertyInfo>();  //非静态属性
+        static List<PropertyInfo> allProps = new List<PropertyInfo>();
+        static EventInfo[] events = null;
+        static List<EventInfo> eventList = new List<EventInfo>();
+        static List<ConstructorInfo> ctorList = new List<ConstructorInfo>();
+        static List<ConstructorInfo> ctorExtList = new List<ConstructorInfo>();    
+        static List<MethodInfo> getItems = new List<MethodInfo>();   //特殊属性
+        static List<MethodInfo> setItems = new List<MethodInfo>();
+
+        static BindingFlags binding = BindingFlags.Public | BindingFlags.Static | BindingFlags.IgnoreCase;
+            
+        static ObjAmbig ambig = ObjAmbig.NetObj;    
+        //wrapClaaName + "Wrap" = 导出文件名，导出类名
+        public static string wrapClassName = "";
+
+        public static string libClassName = "";
+        public static string extendName = "";
+        public static Type extendType = null;
+
+        public static HashSet<Type> eventSet = new HashSet<Type>();
+
+        public static List<Type> extendList = new List<Type>();
+        public static List<MethodInfo> extendMethod = new List<MethodInfo>();
+
+
+        public static List<string> memberFilter = new List<string>
+        {
+            "String.Chars",
+            "AnimationClip.averageDuration",
+            "AnimationClip.averageAngularSpeed",
+            "AnimationClip.averageSpeed",
+            "AnimationClip.apparentSpeed",
+            "AnimationClip.isLooping",
+            "AnimationClip.isAnimatorMotion",
+            "AnimationClip.isHumanMotion",
+            "AnimatorOverrideController.PerformOverrideClipListCleanup",
+            "Caching.SetNoBackupFlag",
+            "Caching.ResetNoBackupFlag",
+            "Light.areaSize",
+            "Security.GetChainOfTrustValue",
+            "Texture2D.alphaIsTransparency",
+            "WWW.movie",
+            "WebCamTexture.MarkNonReadable",
+            "WebCamTexture.isReadable",		
+            "Graphic.OnRebuildRequested",
+            "Text.OnRebuildRequested",
+            "Resources.LoadAssetAtPath",
+            "Application.ExternalEval",         
+            //NGUI
+            "UIInput.ProcessEvent",
+            "UIWidget.showHandlesWithMoveTool",
+            "UIWidget.showHandles",               
+            "Input.IsJoystickPreconfigured",    
+            "UIDrawCall.isActive",    
+            "Handheld.SetActivityIndicatorStyle",
+            "CanvasRenderer.OnRequestRebuild",
+            "CanvasRenderer.onRequestRebuild",
+        };
+
+        public static void AddMemberFilter(List<string> newFilter)
+        {
+            memberFilter.AddRange(newFilter);
+        }
+
+        public static bool IsMemberFilter(MemberInfo mi)
+        {
+            return memberFilter.Contains(type.Name + "." + mi.Name);
+        }
+        public static bool IsMemberFilter(Type t)
+        {
+            string name = LuaMisc.GetTypeName(t);
+            return memberFilter.Find((p) => { return name.Contains(p); }) != null;
+        }
+
+
+        public static Dictionary<string, List<string>> memberIncluded = new Dictionary<string, List<string>>();
+        public static void AddMemberIncluded(Dictionary<string, List<string>> newIncluded)
+        {
+            foreach(var pair in newIncluded)
+            {
+                memberIncluded[pair.Key] = pair.Value;
+            }
+        }
+        public static bool IsMemberIncluded(MemberInfo mi)
+        {
+            return !memberIncluded.ContainsKey(type.Name) || memberIncluded[type.Name].Contains(mi.Name);
+        }
+
+        static ToLuaExport()
+        {
+            Debugger.useLog = true;
+        }
+
+
+        public static void Clear()
+        {
+            className = null;
+            type = null;
+            baseType = null;
+            isStaticClass = false;        
+            usingList.Clear();
+            op = MetaOp.None;    
+            sb = new StringBuilder();        
+            fields = null;
+            props = null;
+            methods.Clear();
+            allProps.Clear();
+            propList.Clear();
+            eventList.Clear();
+            ctorList.Clear();
+            ctorExtList.Clear();        
+            ambig = ObjAmbig.NetObj;
+            wrapClassName = "";
+            libClassName = "";
+            extendName = "";
+            eventSet.Clear();
+            extendType = null;
+            nameCounter.Clear();
+            events = null;
+            getItems.Clear();
+            setItems.Clear();
+        }
+
+        private static MetaOp GetOp(string name)
+        {
+            if (name == "op_Addition")
+            {
+                return MetaOp.Add;
+            }
+            else if (name == "op_Subtraction")
+            {
+                return MetaOp.Sub;
+            }
+            else if (name == "op_Equality")
+            {
+                return MetaOp.Eq;
+            }
+            else if (name == "op_Multiply")
+            {
+                return MetaOp.Mul;
+            }
+            else if (name == "op_Division")
+            {
+                return MetaOp.Div;
+            }
+            else if (name == "op_UnaryNegation")
+            {
+                return MetaOp.Neg;
+            }
+            else if (name == "ToString" && !isStaticClass)
+            {
+                return MetaOp.ToStr;
+            }
+
+            return MetaOp.None;
+        }
+
+
+
+         //操作符函数无法通过继承metatable实现
+        static void GenBaseOpFunction(List<MethodInfo> list)
+        {        
+            Type baseType = type.BaseType;
+
+            while (baseType != null)
+            {
+                if (allTypes.IndexOf(baseType) >= 0)
+                {
+                    MethodInfo[] methods = baseType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.Static | BindingFlags.IgnoreCase);
+
+                    for (int i = 0; i < methods.Length; i++)
+                    {
+                        MetaOp baseOp = GetOp(methods[i].Name);
+
+                        if (baseOp != MetaOp.None && (op & baseOp) == 0)
+                        {
+                            if (baseOp != MetaOp.ToStr)
+                            {
+                                list.Add(methods[i]);
+                            }
+
+                            op |= baseOp;
+                        }
+                    }
+                }
+
+                baseType = baseType.BaseType;
+            }
+        }
+
+
+        public static void Generate(string dir)
+        {
+            if (type.IsInterface && type != typeof(System.Collections.IEnumerator))
+            {
+                return;
+            }
+
+            Console.Write("Begin Generate lua Wrap for class {0} \n", className);        
+            sb = new StringBuilder();
+            usingList.Add("System");                
+
+            if (wrapClassName == "")
+            {
+                wrapClassName = className;
+            }
+
+            //如果是枚举类型
+            if (type.IsEnum)
+            {
+                GenEnum();            
+                sb.AppendLineEx("}\r\n");            
+                SaveFile(dir + wrapClassName + "Wrap.cs");
+                return;
+            }
+            
+            List<MethodInfo> list = new List<MethodInfo>();
+            bool flag = false;
+
+            if (baseType != null || isStaticClass)
+            {
+                binding |= BindingFlags.DeclaredOnly;
+                flag = true;
+            }
+
+            list.AddRange(type.GetMethods(BindingFlags.Instance | binding));        
+
+            for (int i = list.Count - 1; i >= 0; --i)
+            {           
+                //去掉操作符函数
+                if (list[i].Name.StartsWith("op_") || list[i].Name.StartsWith("add_") || list[i].Name.StartsWith("remove_"))
+                {
+                    if (!IsNeedOp(list[i].Name))
+                    {
+                        list.RemoveAt(i);
+                    }
+
+                    continue;
+                }
+
+                //扔掉 unity3d 废弃的函数                
+                if (IsObsolete(list[i]))
+                {
+                    list.RemoveAt(i);
+                }
+            }
+
+            PropertyInfo[] ps = type.GetProperties();
+
+            for (int i = 0; i < ps.Length; i++)
+            {
+                if (IsObsolete(ps[i]))
+                {
+                    list.RemoveAll((p) => { return p == ps[i].GetGetMethod() || p == ps[i].GetSetMethod(); });
+                }
+                else
+                {
+                    MethodInfo md = ps[i].GetGetMethod();
+
+                    if (md != null)
+                    {
+                        int index = list.FindIndex((m) => { return m == md; });
+
+                        if (index >= 0)
+                        {
+                            if (md.GetParameters().Length == 0)
+                            {
+                                list.RemoveAt(index);
+                            }
+                            else if (md.Name == "get_Item")
+                            {
+                                getItems.Add(md);                            
+                            }
+                        }
+                    }
+
+                    md = ps[i].GetSetMethod();
+
+                    if (md != null)
+                    {
+                        int index = list.FindIndex((m) => { return m == md; });
+
+                        if (index >= 0)
+                        {
+                            if (md.GetParameters().Length == 1)
+                            {
+                                list.RemoveAt(index);
+                            }
+                            else if (md.Name == "set_Item")
+                            {
+                                setItems.Add(md);                            
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (flag && !isStaticClass)
+            {
+                List<MethodInfo> baseList = new List<MethodInfo>(type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.IgnoreCase));
+
+                for (int i = baseList.Count - 1; i >= 0; i--)
+                {
+                    if (BeDropMethodType(baseList[i]))
+                    {
+                        baseList.RemoveAt(i);
+                    }
+                }
+
+                HashSet<MethodInfo> addList = new HashSet<MethodInfo>();
+
+                for (int i = 0; i < list.Count; i++)
+                {
+                    List<MethodInfo> mds = baseList.FindAll((p) => { return p.Name == list[i].Name; });
+                
+                    for(int j = 0; j < mds.Count; j++)
+                    {
+                        addList.Add(mds[j]);
+                        baseList.Remove(mds[j]);
+                    }
+                }
+
+                list.AddRange(addList);
+            }
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                GetDelegateTypeFromMethodParams(list[i]);
+            }
+
+            //ProcessExtends(list);
+            GenBaseOpFunction(list);
+            methods = list;
+            InitPropertyList();
+            InitCtorList();
+
+            sb.AppendFormat("public class {0}Wrap\r\n", wrapClassName);
+            sb.AppendLineEx("{");
+
+            GenRegisterFunction();
+            GenConstructFunction();
+            GenItemPropertyFunction();             
+            GenFunctions();
+            GenToStringFunction();
+            GenIndexFunc();
+            GenNewIndexFunc();
+            GenOutFunction();
+            GenEventFunctions();        
+
+            sb.AppendLineEx("}\r\n");                 
+            SaveFile(dir + wrapClassName + "Wrap.cs");
+        }
+
+
+        public static List<Type> allTypes = new List<Type>();
+
+        static bool BeDropMethodType(MethodInfo md)
+        {
+            Type t = md.DeclaringType;
+
+            if (t == type)
+            {
+                return true;
+            }
+
+            return allTypes.IndexOf(t) < 0;        
+        }
+
+        //是否为委托类型，没处理废弃
+        public static bool IsDelegateType(Type t)
+        {
+            if (!typeof(System.MulticastDelegate).IsAssignableFrom(t) || t == typeof(System.MulticastDelegate))
+            {
+                return false;
+            }        
+
+            if (IsMemberFilter(t))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+
+
+        static void InitPropertyList()
+        {
+            props = type.GetProperties(BindingFlags.GetProperty | BindingFlags.SetProperty | BindingFlags.Instance | binding);
+            propList.AddRange(type.GetProperties(BindingFlags.GetProperty | BindingFlags.SetProperty | BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase));
+            fields = type.GetFields(BindingFlags.GetField | BindingFlags.SetField | BindingFlags.Instance | binding);
+            events = type.GetEvents(BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public | BindingFlags.Static);
+            eventList.AddRange(type.GetEvents(BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public));
+
+            List<FieldInfo> fieldList = new List<FieldInfo>();
+            fieldList.AddRange(fields);
+
+            for (int i = fieldList.Count - 1; i >= 0; i--)
+            {
+                if (IsObsolete(fieldList[i]))
+                {
+                    fieldList.RemoveAt(i);
+                }
+                else if (IsDelegateType(fieldList[i].FieldType))
+                {
+                    eventSet.Add(fieldList[i].FieldType);
+                }
+            }
+
+            fields = fieldList.ToArray();
+
+            List<PropertyInfo> piList = new List<PropertyInfo>();
+            piList.AddRange(props);
+
+            for (int i = piList.Count - 1; i >= 0; i--)
+            {
+                if (IsObsolete(piList[i]))
+                {
+                    piList.RemoveAt(i);
+                }
+                else if (piList[i].Name == "Item" && IsItemThis(piList[i]))
+                {
+                    piList.RemoveAt(i);
+                }
+                else if (IsDelegateType(piList[i].PropertyType))
+                {
+                    eventSet.Add(piList[i].PropertyType);
+                }
+            }
+
+            props = piList.ToArray();
+
+            for (int i = propList.Count - 1; i >= 0; i--)
+            {
+                if (IsObsolete(propList[i]))
+                {
+                    propList.RemoveAt(i);
+                }
+            }
+
+            allProps.AddRange(props);
+            allProps.AddRange(propList);
+
+            List<EventInfo> evList = new List<EventInfo>();
+            evList.AddRange(events);
+
+            for (int i = evList.Count - 1; i >= 0; i--)
+            {
+                if (IsObsolete(evList[i]))
+                {
+                    evList.RemoveAt(i);
+                }
+                else if (IsDelegateType(evList[i].EventHandlerType))
+                {
+                    eventSet.Add(evList[i].EventHandlerType);
+                }
+            }
+
+            events = evList.ToArray();
+
+            for (int i = eventList.Count - 1; i >= 0; i--)
+            {
+                if (IsObsolete(eventList[i]))
+                {
+                    eventList.RemoveAt(i);
+                }
+            }
+        }
+
+
+        static void SaveFile(string file)
+        {        
+            using (StreamWriter textWriter = new StreamWriter(file, false, Encoding.UTF8))
+            {            
+                StringBuilder usb = new StringBuilder();
+                usb.AppendLineEx("//this source code was auto-generated by tolua#, do not modify it");
+
+                foreach (string str in usingList)
+                {
+                    usb.AppendFormat("using {0};\r\n", str);
+                }
+
+                usb.AppendLineEx("using LuaInterface;");
+
+                if (ambig == ObjAmbig.All)
+                {
+                    usb.AppendLineEx("using Object = UnityEngine.Object;");
+                }
+
+                usb.AppendLineEx();
+
+                textWriter.Write(usb.ToString());
+                textWriter.Write(sb.ToString());
+                textWriter.Flush();
+                textWriter.Close();
+            }  
+        }
+
+
+        static string GetMethodName(MethodInfo md)
+        {
+            if (md.Name.StartsWith("op_"))
+            {
+                return md.Name;
+            }
+
+            object[] attrs = md.GetCustomAttributes(true);
+
+            for (int i = 0; i < attrs.Length; i++)
+            {            
+                if (attrs[i] is LuaRenameAttribute)
+                {
+                    LuaRenameAttribute attr = attrs[i] as LuaRenameAttribute;
+                    return attr.Name;
+                }
+            }
+
+            return md.Name;
+        }
+
+
+        static void GenRegisterFuncItems()
+        {
+            //注册库函数
+            for (int i = 0; i < methods.Count; i++)
+            {
+                MethodInfo m = methods[i];
+                int count = 1;
+
+                if (IsGenericMethod(m))
+                {
+                    continue;
+                }
+
+                string name = GetMethodName(m);
+
+                if (!nameCounter.TryGetValue(name, out count))
+                {
+                    if (!name.StartsWith("op_"))
+                    {
+                        sb.AppendFormat("\t\tL.RegFunction(\"{0}\", {1});\r\n", name, name == "Register" ? "_Register" : name);
+                    }
+
+                    nameCounter[name] = 1;
+                }
+                else
+                {
+                    nameCounter[name] = count + 1;                
+                }
+            }
+
+            if (ctorList.Count > 0 || type.IsValueType || ctorExtList.Count > 0)
+            {
+                sb.AppendFormat("\t\tL.RegFunction(\"New\", _Create{0});\r\n", wrapClassName);            
+            }
+
+            if (getItems.Count > 0 || setItems.Count > 0)
+            {            
+                sb.AppendLineEx("\t\tL.RegVar(\"this\", _this, null);");
+            }
+        }
+
+
+        static void GenRegisterOpItems()
+        {
+            if ((op & MetaOp.Add) != 0)
+            {
+                sb.AppendLineEx("\t\tL.RegFunction(\"__add\", op_Addition);");                                            
+            }
+
+            if ((op & MetaOp.Sub) != 0)
+            {
+                sb.AppendLineEx("\t\tL.RegFunction(\"__sub\", op_Subtraction);");
+            }
+
+            if ((op & MetaOp.Mul) != 0)
+            {
+                sb.AppendLineEx("\t\tL.RegFunction(\"__mul\", op_Multiply);");
+            }
+
+            if ((op & MetaOp.Div) != 0)
+            {
+                sb.AppendLineEx("\t\tL.RegFunction(\"__div\", op_Division);");
+            }
+
+            if ((op & MetaOp.Eq) != 0)
+            {
+                sb.AppendLineEx("\t\tL.RegFunction(\"__eq\", op_Equality);");    
+            }
+
+            if ((op & MetaOp.Neg) != 0)
+            {
+                sb.AppendLineEx("\t\tL.RegFunction(\"__unm\", op_UnaryNegation);");    
+            }
+
+            if ((op & MetaOp.ToStr) != 0)
+            {
+                sb.AppendLineEx("\t\tL.RegFunction(\"__tostring\", Lua_ToString);");
+            }
+        }
+
+
+        static bool IsItemThis(PropertyInfo info)
+        {        
+            MethodInfo md = info.GetGetMethod();
+
+            if (md != null)
+            {
+                return md.GetParameters().Length != 0;
+            }
+
+            md = info.GetSetMethod();
+
+            if (md != null)
+            {
+                return md.GetParameters().Length != 1;
+            }
+
+            return true;
+        }
+
+
+        static void GenRegisterVariables()
+        {
+            if (fields.Length == 0 && props.Length == 0 && events.Length == 0 && isStaticClass && baseType == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < fields.Length; i++)
+            {
+                if (fields[i].IsLiteral || fields[i].IsPrivate || fields[i].IsInitOnly)
+                {
+                    if (fields[i].IsLiteral && fields[i].FieldType.IsPrimitive && !fields[i].FieldType.IsEnum)
+                    {
+                        double d = Convert.ToDouble(fields[i].GetValue(null));
+                        sb.AppendFormat("\t\tL.RegConstant(\"{0}\", {1});\r\n", fields[i].Name, d);
+                    }
+                    else
+                    {
+                        sb.AppendFormat("\t\tL.RegVar(\"{0}\", get_{0}, null);\r\n", fields[i].Name);
+                    }
+                }
+                else
+                {
+                    sb.AppendFormat("\t\tL.RegVar(\"{0}\", get_{0}, set_{0});\r\n", fields[i].Name);
+                }
+            }
+
+            for (int i = 0; i < props.Length; i++)
+            {
+                if (props[i].CanRead && props[i].CanWrite && props[i].GetSetMethod(true).IsPublic)
+                {
+                    MethodInfo md = methods.Find((p) => { return p.Name == "get_" + props[i].Name; });
+                    string get = md == null ? "get" : "_get";                
+                    md = methods.Find((p) => { return p.Name == "set_" + props[i].Name; });
+                    string set = md == null ? "set" : "_set";
+                    sb.AppendFormat("\t\tL.RegVar(\"{0}\", {1}_{0}, {2}_{0});\r\n", props[i].Name, get, set);
+                }
+                else if (props[i].CanRead)
+                {
+                    MethodInfo md = methods.Find((p) => { return p.Name == "get_" + props[i].Name; });
+                    sb.AppendFormat("\t\tL.RegVar(\"{0}\", {1}_{0}, null);\r\n", props[i].Name, md == null ? "get" : "_get");
+                }
+                else if (props[i].CanWrite)
+                {
+                    MethodInfo md = methods.Find((p) => { return p.Name == "set_" + props[i].Name; });
+                    sb.AppendFormat("\t\tL.RegVar(\"{0}\", null, {1}_{0});\r\n", props[i].Name, md == null ? "set" : "_set");
+                }
+            }
+
+            for (int i = 0; i < events.Length; i++)
+            {
+                sb.AppendFormat("\t\tL.RegVar(\"{0}\", get_{0}, set_{0});\r\n", events[i].Name);            
+            }  
+        }   
+
+
+        static void GenRegisterEventTypes()
+        {
+            List<Type> list = new List<Type>();
+
+            foreach (Type t in eventSet)
+            {
+                string funcName = null;
+                string space = GetNameSpace(t, out funcName);
+
+                if (space != className)
+                {
+                    list.Add(t);
+                    continue;
+                }
+                            
+                funcName = ConvertToLibSign(funcName);            
+                int index = Array.FindIndex<DelegateType>(CustomSettings.customDelegateList, (p) => { return p.type == t; });
+                string abr = null;
+                if (index >= 0) abr = CustomSettings.customDelegateList[index].abr;
+                abr = abr == null ? funcName : abr;
+                funcName = ConvertToLibSign(space) + "_" + funcName;
+
+                sb.AppendFormat("\t\tL.RegFunction(\"{0}\", {1});\r\n", abr, funcName);
+            }
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                eventSet.Remove(list[i]);
+            }
+        }
+
+
+
+         static void GenRegisterFunction()
+        {
+            sb.AppendLineEx("\tpublic static void Register(LuaState L)");
+            sb.AppendLineEx("\t{");
+
+            if (isStaticClass)
+            {
+                sb.AppendFormat("\t\tL.BeginStaticLibs(\"{0}\");\r\n", libClassName);            
+            }
+            else if (!type.IsGenericType)
+            {
+                if (baseType == null)
+                {
+                    sb.AppendFormat("\t\tL.BeginClass(typeof({0}), null, null);\r\n", className);
+                }
+                else
+                {
+                    sb.AppendFormat("\t\tL.BeginClass(typeof({0}), typeof({1}), null);\r\n", className, GetBaseTypeStr(baseType));
+                }
+            }
+            else
+            {
+                if (baseType == null)
+                {
+                    sb.AppendFormat("\t\tL.BeginClass(typeof({0}), null, \"{1}\");\r\n", className, libClassName);
+                }
+                else
+                {
+                    sb.AppendFormat("\t\tL.BeginClass(typeof({0}), typeof({1}), \"{2}\");\r\n", className, GetBaseTypeStr(baseType), libClassName);
+                }
+            }
+
+            GenRegisterFuncItems();
+            GenRegisterOpItems();
+            GenRegisterVariables();
+            GenRegisterEventTypes();            //注册事件类型
+
+            if (!isStaticClass)
+            {
+                if (CustomSettings.outList.IndexOf(type) >= 0)
+                {
+                    sb.AppendLineEx("\t\tL.RegVar(\"out\", get_out, null);");
+                }
+
+                sb.AppendFormat("\t\tL.EndClass();\r\n");
+            }
+            else
+            {
+                sb.AppendFormat("\t\tL.EndStaticLibs();\r\n");
+            }
+
+            sb.AppendLineEx("\t}");
+        }
+
+
+        static bool IsParams(ParameterInfo param)
+        {
+            return param.GetCustomAttributes(typeof(ParamArrayAttribute), false).Length > 0;
+        }
+
+        static void GenFunction(MethodInfo m)
+        {
+            string name = GetMethodName(m);
+            sb.AppendLineEx("\r\n\t[MonoPInvokeCallbackAttribute(typeof(LuaCSFunction))]");
+            sb.AppendFormat("\tstatic int {0}(IntPtr L)\r\n", name == "Register" ? "_Register" : name);
+            sb.AppendLineEx("\t{");
+
+            if (HasAttribute(m, typeof(UseDefinedAttribute)))
+            {
+                FieldInfo field = extendType.GetField(name + "Defined");
+                string strfun = field.GetValue(null) as string;
+                sb.AppendLineEx(strfun);
+                sb.AppendLineEx("\t}");
+                return;
+            }
+
+            ParameterInfo[] paramInfos = m.GetParameters();
+            int offset = m.IsStatic ? 0 : 1;
+            bool haveParams = HasOptionalParam(paramInfos);
+            int rc = m.ReturnType == typeof(void) ? 0 : 1;
+
+            BeginTry();
+
+            if (!haveParams)
+            {
+                int count = paramInfos.Length + offset;
+                sb.AppendFormat("\t\t\tToLua.CheckArgsCount(L, {0});\r\n", count);
+            }
+            else
+            {
+                sb.AppendLineEx("\t\t\tint count = LuaDLL.lua_gettop(L);");
+            }
+
+            rc += ProcessParams(m, 3, false);
+            sb.AppendFormat("\t\t\treturn {0};\r\n", rc);
+            EndTry();
+            sb.AppendLineEx("\t}");
+        }
+
+         //没有未知类型的模版类型List<int> 返回false, List<T>返回true
+        static bool IsGenericConstraintType(Type t)
+        {
+            if (!t.IsGenericType)
+            {
+                return t.IsGenericParameter;
+            }
+
+            Type[] types = t.GetGenericArguments();
+
+            for (int i = 0; i < types.Length; i++)
+            {
+                Type t1 = types[i];
+
+                if (t1.IsGenericParameter)
+                {
+                    return true;
+                }
+
+                if (IsGenericConstraintType(t1))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        static bool IsGenericConstraints(Type[] constraints)
+        {
+            for (int i = 0; i < constraints.Length; i++)
+            {
+                if (!IsGenericConstraintType(constraints[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        static bool IsGenericMethod(MethodInfo md)
+        {
+            if (md.IsGenericMethod)
+            {
+                Type[] gts = md.GetGenericArguments();
+                List<ParameterInfo> list = new List<ParameterInfo>(md.GetParameters());
+
+                for (int i = 0; i < gts.Length; i++)
+                {
+                    Type[] ts = gts[i].GetGenericParameterConstraints();
+
+                    if (ts == null || ts.Length == 0 || IsGenericConstraints(ts))
+                    {
+                        return true;
+                    }
+
+                    ParameterInfo p = list.Find((iter) => { return iter.ParameterType == gts[i]; });
+
+                    if (p == null)
+                    {
+                        return true;
+                    }
+
+                    list.RemoveAll((iter) => { return iter.ParameterType == gts[i]; });
+                }
+
+                for (int i = 0; i < list.Count; i++)
+                {                
+                    Type t = list[i].ParameterType;
+
+                    if (IsGenericConstraintType(t))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+}
+
+
+public class ToLuaNode<T>
+{
+    public List<ToLuaNode<T>> childs = new List<ToLuaNode<T>>();
+    public ToLuaNode<T> parent = null;
+    public T value;
+    //添加命名空间节点所在位置，解决A.B.C/A.C存在相同名称却在不同命名空间所造成的Wrap问题
+    public int layer;
+}
+
+ToLuaTree{
+
+}

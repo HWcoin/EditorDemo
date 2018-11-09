@@ -1,0 +1,263 @@
+MaterialJsonData{
+    
+    _materialJsonDataDict<Dictionary<string, MaterialJsonData>> = Dictionary.New()
+
+
+    Clear(){
+        _materialJsonDataDict.Clear();
+    }
+}
+
+AnimatorControllerJsonData{
+
+    _controllerJsonDataDict<Dictionary<string, AnimatorControllerJsonData>> = Dictionary.New()
+
+    Clear(){
+        _controllerJsonDataDict.Clear()
+    }
+}
+
+
+AssetProcessor
+
+    FILE_UNITY = ".unity"
+    FILE_PREFAB = ".prefab"
+    FILE_MATERIAL = ".mat"
+    FILE_CONTROLLER = ".controller"
+    FILE_FONT = ".ttf"
+
+    _assetProcessor<AssetProcessor>
+
+    _unityProcessor<UnityAssetProcessor>
+    _gameObjectProcessor<GameObjectAssetProcessor>
+    _materialProcessor<MaterialAssetProcessor>
+    _animatorControllerProcessor<AnimatorControllerAssetProcessor>
+    _fontProcessor<FontAssetProcessor>
+
+    POST_FIX_JSON = "_shadow.json"
+
+    _processRecord<Dictionary<string, int>> = Dictionary.New()
+
+    PrepareBuildAsset(canBuildList<List<string>>){
+        foreach(path<string> in canBuildList){
+            GetProcessor(path).PrepareAssetOne(path)
+        }
+
+        AssetDatabase.Refresh()
+
+        foreach(path<string> in canBuildList){
+            GetProcessor(path).PrepareAssetTwo(path)
+        }
+    }
+
+
+
+    GetProcessor(path<string>){
+        [根据以上5种后缀名返回相应处理器,如果不属于上面5种之一,返回AssetProcessor]
+        [这里以GameObjectAssetProcessor为例跟踪]
+        return _assetProcessor
+    }
+
+    PrepareAssetOne(path<string>){
+        [不一定会处理...]
+    }
+
+    PrepareAssetTwo(path<string>){
+        [不一定会处理...]
+    }
+
+    StartRecord(){
+        _processRecord.Clear()
+    }
+
+    EndRecord(){
+        foreach(pair<var> in _processRecord){
+            print(pair.key+pair.value)
+        }
+        _processRecord.Clear()
+    }
+
+    ProcessAsset(path<string>, buildStrategy<AssetBuildStrategy>){
+        prt<var> = Environment.TickCount
+
+        [同样跟踪GameObjectAssetProcessor]
+        pro<var> = GetProcessor(path)
+
+        result = pro.Process(path, buildStrategy)
+        ProcessRecord(pro.GetType().tostring(), Enveionment.TickCount - prt)
+
+        return result
+    }
+    [不全]
+    Process(path<string>, buildStrategy<AssetBuildStrategy>){
+        pathListList<List<List<string>>> = List.New()
+        
+        do
+        try:
+                dependAssetPathList<List<string>> = GetDependAssetPathList(path)
+                filteredPathSet<HashSet<string>> = HashSet.New()
+                asset<Object> = GetAsset(path)
+                count<int> = buildStrategy.buildStrategyNodeList.Count;
+                for (i<int>=0; i < count; i++){
+                    node<BuildStrategyNode = buildStrategy.buildStrategyNodeList[i]
+                    pathList<List<string>>
+
+                    if string.IsNullOrEmpty(node.processor) == false then
+                        pathSet<HashSet<string>> = ApplyProcessor(asset, node);
+                        RemoveFilteredPath(filteredPathSet, pathSet);
+                        pathList = pathSet.ToList<string>();
+                        pathList.Sort(ComparePath);
+                    else
+
+                    end
+                }
+
+        catch:
+
+        end
+    }
+
+    ProcessRecord(typen<string, time<int>){
+        if (!_processRecord.ContainsKey(typen)) _processRecord[typen] = 0;
+            _processRecord[typen] += time;
+    }   
+
+    virtual GetAsset(path<string>){
+    }
+
+    [已知资源path,返回与它有依赖关系的所有资源列表。]
+    GetDependAssetPathList(path<string>){
+        dependAssetPathList<List<string>> = AssetDatabase.GetDependencies(new string[]{path}.ToList<string>())
+        return dependAssetPathList
+    }
+}
+
+[查看其它Processor的处理，稍后跟踪]
+GameObjectAssetProcessor{
+    SCENES_FOLDER_PATH = "Assets/Resources/Scenes";
+    AVATARS_FOLDER_PATH = "Assets/Resources/Characters/Avatar";
+    GUI_FOLDER_PATH = "Assets/Resources/GUI";
+    UNUSED_CHILD_NAME_SET = new HashSet<string>() { "light", "shadow" }
+
+    PrepareAssetOne(path<string){
+        TemporaryAssetUtil.Instance.CreateTempAssetOne(path)
+    }
+
+    PrepareAssetTwo(path<string){
+        TemporaryAssetUtil.Instance.CreateTempAssetTwo(path)
+    }
+
+    Process(path<string>, buildStrategy<AssetBuildStrategy>){
+        [没有实现这个方法,查看父类AssetProcessor]
+    }
+
+    GetAsset(path<string>){
+        temp<GameObject> = TemporaryAssetUtil.Instance.CreateTempAsset(path) as GameObject
+        temp = ModifyScenePrefab(temp, path)
+        temp = ModifyCharacterPrefab(temp, path)
+        temp = ModifyGUIPrefab(temp, path)
+        return temp
+    }
+
+    DATA_DYNAMIC_MAP = "Assets/Resources/data/dynamic_maps/";
+    _lightmapDataPrefix = "lightmapdata_
+    HandleLightmapUV(go<GameObject>, assetpath<string>){
+        fileName<var> = string.Concat(DATA_DYNAMIC_MAP, _lightmapDataPrefix, go.name, ConstString.XML_SUFFIX)
+        contetn<var> = FileUtils.LoadFile(fileName)
+        lightmapAssetDatas = GameLoader.Utils.XML.XMLUtils.LoadXMLText<LightmapAssetData>(content)
+
+        renderers<var> = go.GetComponentsInChildren<Renderer>()
+        terr<var> = go.GetComponentInChildren<Terrain>()
+
+        do
+        try:
+            foreach(render<var> in renderers){
+                lightmapAssetData<var> = GetLightmapAssetData(render.name + render.transform.position, lightmapAssetDatas)
+                if  lightmapAssetData != null then
+                    AssetBridgeHelper.AddEntry(render.gameObject, "LoghtmapUI", new string[]{"render", lightmapAssetData.Index.ToString(), lightmapAssetData.x.ToString(), lightmapAssetData.y.ToString(), lightmapAssetData.z.ToString(), lightmapAssetData.w.ToString() })
+                end
+            }
+        catch:
+        end
+    }
+
+    GetLightmapAssetData(name<string>, list<List<LightmapAssetData>>){
+        for (int i = 0; i < list.Count; i++)
+        {
+            if (list[i].name == name)
+                return list[i];
+        }
+        return null;
+    }
+
+    static int _layerBloom = UnityEngine.LayerMask.NameToLayer("Bloom");
+    static int _layerDummy = UnityEngine.LayerMask.NameToLayer("Dummy");
+    static int _layerDefault = UnityEngine.LayerMask.NameToLayer("Default");
+    static HashSet<int> _excludeLayers = new HashSet<int>() { _layerBloom, _layerDummy };
+    ResetScenePrefabLayers(transform<Transform>){
+        if (_excludeLayers.Contains(transform.gameObject.layer))
+        {
+            transform.gameObject.layer = _layerDefault;
+        }
+        for (int i = 0; i < transform.childCount; i++)
+        {
+            ResetScenePrefabLayers(transform.GetChild(i));
+        }
+    }
+
+    ModifyScenePrefab(temp<GameObject> path<string>){
+        [场景资源Prefab进行删除隐藏编辑时辅助资源]
+        if temp != null and path.Contains(SCENES_FOLDER_PATH) then
+            [The GameObject at the root of the prefab.]
+            go<GameObject> = PrefabUtility.InstantiatePrefab(temp)
+
+            prefabPath<string> AssetDatabase.GetAssetPath(temp)
+            childCount<int> = go.transform.childCount
+            for(i<int> = childCount-1; i >= 0; i--){
+                child<GameObject> = go.transform.GetChild(i).gameObject
+                if (child.activeSelf == false){
+                    if (UNUSE_CHILD_NAME_SET.Contains(child.name.ToLower())){
+                        Object.DestroyImmediate(child, true)
+                    }
+                }
+            }
+
+            HandleLightmapUV(go, path)
+            ResetScenePrefabLayers(go.transform)
+            PrfabUtility.CreatePrefab(prefabPath, typeof(GameObject))
+            Object.DestroyImmediate(go, true)
+            temp = AssetDatabase.LoadAssetAtPath(prefabPath, typeof(GameObject)) as GameObject;
+        end
+
+        return temp
+    }
+
+    ModifyCharacterPrefab(temp<GameObject>, path<string>){
+        boneRoot<string> = "bip_master"
+        boneCamera<string> = "bone_camer"
+        if temp != null and path.Contains(AVATARS_FOLDER_PATH) then
+            bm<var> = temp.transform.FindChild(boneRoot)
+            if bm and bm.FindChild(boneCamera) == null then
+                go<GameObject> = PrefabUtility.InstantiatePrefab(temp)
+                prefabPath<string> = AssetDatabase.GetAssetPath(temp)
+
+                bm = go.transform.FindChild(boneRoot)
+                bc<var> = GameObject.New(boneCamera)
+                bc.transform.SetParent(bm, false)
+
+                PrefabUtility.CreatePrefab(prefabPath, go, ReplacePrefabOption.ConnectToPrefab)
+                Object.DestroyImmediate(go, true)
+                temp = AssetDatabase.LoadAssetAtPath(prefabPath, typeof(GameObject))
+
+            end
+        end
+        return temp
+    }
+
+    ModifyGUIPrefab(temp<GameObject>, path<string>){
+        return temp
+    }
+}
+
+AssetBuildStrategy{
+}

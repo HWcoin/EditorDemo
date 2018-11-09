@@ -1,0 +1,32 @@
+AssetRecordHelper{
+    [AssetRecord跟"_resources.mk"文件的关系]
+
+    ["打包的时候"]
+    isRecordDirty = [false]
+
+    ReadAssetRecord(fileName<string:"_resources.mk"){
+        path<string> = AssetPathUtil.GetOutputPath(fileName)
+
+        [第一次应该是空的，这里需要重新跟踪]
+        if File.Exits(path) == false then return AssetRecord.New() end
+
+        [已经存在不需要再次创建]
+        jsonContent<string> = FileReadAllText(path, Encoding.UTF8)
+        result<var> = JsonMapper.ToObject<AssetRecord>(jsonContent)
+        if result==null then return AssetRecord.New() end
+        return result
+    }
+}
+
+["_resources.mk"]
+AssetRecord{
+    readonly assetMemoryDict<Dictionary<string, int>>
+    readonly assetDependenceDict<Dictionary<string, List<string>>>
+
+
+    CreateReleaseAssetRecord(){
+    
+        
+    
+    } 
+}

@@ -1,0 +1,385 @@
+PrefabGenerator{
+    
+    static void InitData{
+        string lang = GetLangSetting();
+        _sharePrefabPath = Path.Combine("Assets", Path.Combine(EDIT_GUI_PATH, PANELS_FOLDER_NAME)).Replace('\\', '/') + "/" + SHARED_NAME + ".prefab";
+        _l10nPrefabPath = Path.Combine("Assets", Path.Combine(EDIT_GUI_PATH, PANELS_FOLDER_NAME)).Replace('\\', '/') + "/" + L10N_NAME + ".prefab";
+        _editPanelsAssetPath = Path.Combine("Assets", Path.Combine(EDIT_GUI_PATH, PANELS_FOLDER_NAME)).Replace('\\', '/');
+        _editSpritesAssetPath = Path.Combine("Assets", Path.Combine(EDIT_GUI_PATH, SPRITES_FOLDER_NAME)).Replace('\\', '/');
+        _resourceGUIAssetPath = Path.Combine("Assets", RESOURCES_GUI_PATH).Replace('\\', '/') + "/" + lang;
+        _editPanelsFullPath = Path.Combine(Application.dataPath, Path.Combine(EDIT_GUI_PATH, PANELS_FOLDER_NAME)).Replace('\\', '/');
+        _editSpritesFullPath = Path.Combine(Application.dataPath, Path.Combine(EDIT_GUI_PATH, SPRITES_FOLDER_NAME)).Replace('\\', '/');
+        
+        _resourceGUIFullPath = Path.Combine(Application.dataPath, RESOURCES_GUI_PATH).Replace('\\', '/') + "/" + lang;
+        GetPanelSetting();
+        ///////////////////////////////////////
+        /*
+            static string EDIT_GUI_PATH = "EditData/GUI";
+            static string RESOURCES_GUI_PATH = "Resources/GUI";
+            static string PANELS_FOLDER_NAME = "Panels";
+            static string SPRITES_FOLDER_NAME = "Sprites";
+            static string PANEL_SETTING_FULL_NAME = "EditData/GUI/BatchSetting.json";
+            private const string SHARED_NAME = "GUI_Shared";
+            private const string L10N_NAME = "GUI_L10n";
+
+            lang = "cn"
+            _sharePrefabPath = "Assets/EditData/GUI/Panels/GUI_Shared.prefab"
+            _l10nPrefabPath = "Assets/EditData/GUI/Panels/GUI_L10n.prefab"
+            _editPanelsAssetPath = "Assets/EditData/GUI/Panels"
+            _editSpritesAssetPath = "Assets/EditData/GUI/Sprites""
+            _resourceGUIAssetPath = "Assets/Resources/GUI/cn"
+
+            _editPanelsFullPath = "F:...Assets/EditData/GUI/Panels"
+            _editSpritesFullPath = "F:...Assets/EditData/GUI/Sprites"
+            _resourceGUIFullPath = "F:...Assets/Resources/GUI/cn"
+        */
+    }
+    
+    static List<List<string>> _panelSetting = new List<List<string>>();
+    //读取BatchSetting.json文件至_panelSetting
+    public static void GetPanelSetting(){
+        _panelSetting.Clear();
+        var fullPath = Path.Combine(Application.dataPath, PANEL_SETTING_FULL_NAME).Replace('\\', '/');
+        //fullPath = "F:../Assets/EditData/GUI/BatchSetting.json"
+        string jsonContent = File.ReadAllText(fullPath, Encoding.UTF8);
+
+        JsonData data = JsonMapper.ToObject(jsonContent);
+        var setting = data["setting"];
+        if (setting.IsArray && setting.Count > 0)
+        {
+            for (int i = 0; i < setting.Count; i++)
+            {
+                var value = setting[i];
+                if (value.IsArray && value.Count > 0)
+                {
+                    //StringBuilder str = new StringBuilder();
+                    List<string> subData = new List<string>();
+                    for (int j = 0; j < value.Count; j++)
+                    {
+                        //str.Append(value[j] + ",");
+                        subData.Add(value[j].ToString());
+                    }
+                    _panelSetting.Add(subData);
+                }
+            }
+        }
+    }
+
+    private static void GetShareAndL10nResourceMd5Info(Dictionary<string, string> dic)
+    {
+        //_sharePrefabPath = "Assets/EditData/GUI/Panels/GUI_Shared.prefab"
+        //_l10nPrefabPath = "Assets/EditData/GUI/Panels/GUI_L10n.prefab"
+        //获得所有的依赖项资源，只处理png，用两个Prefab的依赖png路径生成md5码加到dic中
+        string[] dependencies = AssetDatabase.GetDependencies(_sharePrefabPath);
+        string[] l10nDependencies = AssetDatabase.GetDependencies(_l10nPrefabPath);
+
+        for (int j = 0; j < dependencies.Length; j++)
+        {
+            string depPath = dependencies[j];
+            if (Path.GetExtension(depPath) == ".png")
+            {
+                var md5 = MD5Utils.BuildFileMd5(depPath);
+                if (dic.ContainsKey(md5))
+                {
+                    Debug.LogError("share has same png name ====" + depPath);
+                    Debug.LogError("==" + dic[md5]);
+                }
+                else
+                {
+                    dic.Add(md5, depPath);
+                }
+
+            }
+        }
+
+        for (int i = 0; i < l10nDependencies.Length; i++)
+        {
+            string depPath = l10nDependencies[i];
+            //Debug.LogError("depPath =====" + depPath);
+            if (Path.GetExtension(depPath) == ".png")
+            {
+                var md5 = MD5Utils.BuildFileMd5(depPath);
+                if (dic.ContainsKey(md5))
+                {
+                    Debug.LogError("l10n has same png name ====" + depPath);
+                    Debug.LogError("==" + dic[md5]);
+                }
+                else
+                {
+                    dic.Add(md5, depPath);
+                }
+
+            }
+        }
+    }
+    //获得选中的Panel.prefab,用路径来过滤
+    static List<string> GetSelectedPaths()
+    {
+        List<string> result = new List<string>();
+        Object[] selectedList = Selection.GetFiltered(typeof(Object), SelectionMode.Assets);
+        for (int i = 0; i < selectedList.Length; i++)
+        {
+            var obj = selectedList[i];
+            string path = AssetDatabase.GetAssetPath(obj);
+            if (!path.Contains(_editPanelsAssetPath) == true)
+            {
+                continue;
+            }
+            result.Add(path);
+        }
+        return result;
+    }
+
+    //疑问：AssetDatabase.GetAssetPath怎么保证先找到的是公共资源，根据文件生成md5,同个文件无论放哪里生成的md5都一样
+    private static Sprite HandleSprite(Sprite sprite, ImageWrapper img, Dictionary<string, string> resourceMd5Dic)
+    {
+        Sprite s = null;
+        if (sprite == null)
+        {
+            return s;
+        }
+        var spritePath = AssetDatabase.GetAssetPath(sprite);
+        //Debug.LogError("路径====" + spritePath);
+        var md5 = MD5Utils.BuildFileMd5(spritePath);
+        if (resourceMd5Dic.ContainsKey(md5))
+        {
+            s = AssetDatabase.LoadAssetAtPath<Sprite>(resourceMd5Dic[md5]);
+        }
+        return s;
+    }
+
+    public static void ArrangePrefabResource()
+    {
+        var sb = new StringBuilder();
+        InitData();
+
+        List<string> selectedList = GetSelectedPaths();
+        List<string> dependenciesNameList = new List<string>();
+        List<string> spritesNameList = new List<string>();
+
+        //Shared L10n 相关md5码
+        Dictionary<string, string> resourceMd5Dic = new Dictionary<string, string>();
+        GetShareAndL10nResourceMd5Info(resourceMd5Dic);
+
+        //循环处理每一个prefab
+        for (int i = 0; i < selectedList.Count; i++)
+        {
+            string path = selectedList[i];
+            string ex = Path.GetExtension(path);
+            if (ex == ".prefab")
+            {
+                //eg:Panel_Character
+                string panelName = Path.GetFileNameWithoutExtension(path);
+                //eg:Panel_Character.prefab对象
+                GameObject go = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+
+                //eg:获得Panel_Character.prefab所有子物体的ImageWrapper组件
+                ImageWrapper[] list = go.GetComponentsInChildren<ImageWrapper>(true);
+                foreach (ImageWrapper img in list)
+                {
+                    if (img.sprite != null && img.sprite.name != "UISprite")
+                    {
+                        var spritePath = AssetDatabase.GetAssetPath(img.sprite);
+                        var file = new FileInfo(spritePath);
+                        var spritePanelName = file.Directory.Name;
+                        sb.AppendLine("处理的资源panel名称====" + spritePath);    
+                        //处理Image的Selectable组件，如果有。检查公共资源是否有这些资源，有的话用公共资源的。
+                        Selectable selectable = img.gameObject.GetComponent<Selectable>();
+                        if (selectable != null && selectable.transition == Selectable.Transition.SpriteSwap)
+                        {
+                            SpriteState spriteState = selectable.spriteState;
+                            var sH = HandleSprite(spriteState.highlightedSprite, img, resourceMd5Dic);
+                            if(sH != null)
+                            {
+                                spriteState.highlightedSprite = sH;
+                            }
+                            var sP = HandleSprite(spriteState.pressedSprite, img, resourceMd5Dic);
+                            if(sP != null)
+                            {
+                                spriteState.pressedSprite = sP;
+                            }
+                            var sD = HandleSprite(spriteState.disabledSprite, img, resourceMd5Dic);
+                            if(sD != null)
+                            {
+                                spriteState.disabledSprite = sD;
+                            }
+                            selectable.spriteState = spriteState;
+                        }
+
+                        if (spritePanelName != SHARED_NAME && spritePanelName != L10N_NAME)
+                        {
+                            var s = HandleSprite(img.sprite, img, resourceMd5Dic);
+                            if (s != null)
+                            {
+                                img.sprite = s;
+                                continue;
+                            }
+                        }                               
+             
+                        if (spritePanelName != SHARED_NAME && spritePanelName != L10N_NAME && spritePanelName != panelName)
+                        {                            
+                            var dest = string.Concat(_editSpritesAssetPath, "/", panelName);
+                            if (!Directory.Exists(dest))
+                            {
+                                Directory.CreateDirectory(dest);
+                            }
+                            var destFileName = string.Concat(_editSpritesAssetPath, "/", panelName, "/", img.sprite.name, Path.GetExtension(spritePath));
+                            if (!File.Exists(destFileName))
+                            {
+                                //sb.AppendLine("destFileName-=====" + destFileName);
+                                AssetDatabase.CopyAsset(spritePath, destFileName);
+                            }
+                            img.sprite = AssetDatabase.LoadAssetAtPath<Sprite>(destFileName);
+                            sb.AppendLine("修改指向的资源名称-=====" + destFileName);
+                            //break;
+                        }
+                    }
+
+                }
+                EditorUtility.SetDirty(go);
+            }
+            AssetDatabase.SaveAssets();
+        }
+        File.WriteAllText("ArrangePrefabResource.txt", sb.ToString());
+        AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
+        AssetDatabase.SaveAssets();
+    }
+
+    private static Dictionary<string, Object[]> _atlasDict;
+    public static void ResetAssetDict()
+    {
+        _atlasDict = new Dictionary<string, Object[]>();
+    }
+    //根据Panel_Name,获得 BatchSetting.json的主Panel_Name
+    static string GetMainPanelName(string panelName)
+    {
+        if (_panelSetting != null && _panelSetting.Count > 0)
+        {
+            for (int i = 0; i < _panelSetting.Count; i++)
+            {
+                if (_panelSetting[i].Contains(panelName))
+                {
+                    return _panelSetting[i][0];
+                }
+            }
+        }
+        return null;
+    }
+    // the final step
+    static void GeneratePrefabByPrefab(string path)
+    {
+        //Panel_Character.prefab
+        string fileName = Path.GetFileName(path);
+        
+        //Panel_Character
+        string panelName = Path.GetFileNameWithoutExtension(path);
+
+        //"F:...Assets/Resources/GUI/cn/Panel_Character"
+        string newFolderPath = Path.Combine(_resourceGUIFullPath, panelName).Replace('\\', '/');
+
+        //获得 BatchSetting.json所属的第一个元素，如果有
+        string mainPanelPath = null;
+        List<string> mainPanelSettingContent = GetPanelSettingContent(panelName);
+        string mainPanelName = mainPanelSettingContent == null ? null : mainPanelSettingContent[0];
+
+        if (mainPanelName != null)
+        {
+            //mainPanelPath = string.Format("{0}/{1}/{2}", _resourceGUIAssetPath, mainPanelName, path.Replace(fileName, mainPanelName));
+            //"Assets/Resources/GUI/cn/Panel_Character"
+            mainPanelPath = string.Format("{0}/{1}/", _resourceGUIAssetPath, mainPanelName);
+        }
+        
+        //"F:...Assets/EditData/GUI/Sprites/Panel_Character"
+        string editSpritePath = Path.Combine(_editSpritesFullPath, panelName).Replace('\\', '/');
+        //"Assets/EditData/GUI/Sprites/Panel_Character"
+        editSpritePath = TransFullPathToAssetPath(editSpritePath);
+
+        int qualitySetting = GetFolderQualitySetting(editSpritePath);//生成图集质量
+
+        bool etc = false;
+        if (qualitySetting == QUALITY_ETC) etc = true;
+        int padding = GetFolderPaddingSetting(editSpritePath);//同GetFolderQualitySetting，默认2
+        //if (!etc) padding = 1;
+        bool forceSquare = false;
+
+        if (!Directory.Exists(newFolderPath))
+            Directory.CreateDirectory(newFolderPath);
+        string newPath = string.Format("{0}/{1}/{2}", _resourceGUIAssetPath, panelName, fileName);
+
+        string metaPath = newPath + ".meta";
+        string metaBakPath = newPath + ".meta.Bak";
+
+        if (File.Exists(metaBakPath)) File.Delete(metaBakPath);
+        if (File.Exists(metaPath)) File.Copy(metaPath, metaBakPath);
+        AssetDatabase.DeleteAsset(newPath);
+        AssetDatabase.Refresh();
+        //bool copyResult = AssetDatabase.CopyAsset(path, newPath);
+        File.Copy(path, newPath);
+        if (File.Exists(newPath))
+        {
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            if (mainPanelPath != null)
+            {
+                DeletePng(newFolderPath, panelName, mainPanelSettingContent);
+                Debug.LogError("GeneratePrefabByPrefab:mainPanelPath != null");
+                PanelAtlasGenerator.GenerateAtlasByPanels(_editPanelsAssetPath, _resourceGUIAssetPath, mainPanelSettingContent, mainPanelName, forceSquare, etc, padding);
+            }
+            else
+            {
+                PanelAtlasGenerator.GenerateAtlas(newPath, forceSquare, etc, padding);
+            }
+            ChangeDependencies(panelName, newPath);
+        }
+        if (File.Exists(metaPath)) File.Delete(metaPath);
+        if (File.Exists(metaBakPath)) File.Copy(metaBakPath, metaPath);
+        if (File.Exists(metaBakPath)) File.Delete(metaBakPath);
+    }
+
+    private const int QUALITY_ETC = 0;
+    private const int QUALITY_TURE_COLOR = 1;
+    private const int QUALITY_PVRTC4 = 2;
+    private static int GetFolderQualitySetting(string folderPath)
+    {
+        TextAsset jsonAsset = AssetDatabase.LoadAssetAtPath(folderPath + "/_QualitySetting.json", typeof(TextAsset)) as TextAsset;
+        if (jsonAsset == null)
+        {
+            return QUALITY_ETC; //Ari：目前默认是真彩色，后面正式上线要做好ETC分离调整
+        }
+        JsonData jsonData = JsonMapper.ToObject(jsonAsset.text);
+        if (!jsonData.Keys.Contains("quality")) return QUALITY_ETC;
+        return (int)jsonData["quality"];
+    }
+
+    //处理资源的Main方法
+    public static void GenerateResourcesPrefab(){
+        InitData();
+        ArrangePrefabResource();
+
+        ResetAssetDict();
+
+        //循环处理每个prefab
+        List<string> selectedList = GetSelectedPaths();
+        for (int i = 0; i < selectedList.Count; i++)
+        {
+            string path = selectedList[i];
+            string ex = Path.GetExtension(path);
+            if (ex == ".prefab")
+            {
+                string mainPanelPath = null;
+                string mainPanelName = GetMainPanelName(path);
+                if (mainPanelName != null)
+                {//切换生成目标
+                    mainPanelPath = path.Replace(Path.GetFileName(path), mainPanelName);
+                }
+                GeneratePrefabByPrefab(path);
+            }
+            else
+                //如果是文件夹，处理文件夹里的prefab
+                if (ex == string.Empty)
+                {
+                    GeneratePrefabByFolder(path);
+                }
+        }
+    }
+}
