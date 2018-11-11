@@ -49,4 +49,8 @@
     git remote add origin git@github.com:sheng/demo.git
     三、修改config文件
 
+    13. 秘钥
+    ssh-keygen -t rsa -C "youremail@example.com"
+    登陆GitHub，打开“Account settings”，“SSH Keys”页面：
+    点“Add SSH Key”，填上任意Title，在Key文本框里粘贴id_rsa.pub文件的内容：
 --]] 
