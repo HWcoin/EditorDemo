@@ -302,30 +302,33 @@ PrefabGenerator{
         //if (!etc) padding = 1;
         bool forceSquare = false;
 
+        //"F:...Assets/Resources/GUI/cn/Panel_Character"
         if (!Directory.Exists(newFolderPath))
             Directory.CreateDirectory(newFolderPath);
+        //"Assets/Resources/GUI/cn/Panel_Character/Panel_Character.prefab"
         string newPath = string.Format("{0}/{1}/{2}", _resourceGUIAssetPath, panelName, fileName);
 
+        //"Assets/Resources/GUI/cn/Panel_Character/Panel_Character.prefab.meta"
         string metaPath = newPath + ".meta";
+        //"Assets/Resources/GUI/cn/Panel_Character/Panel_Character.prefab.meta.Bak"
         string metaBakPath = newPath + ".meta.Bak";
 
-        if (File.Exists(metaBakPath)) File.Delete(metaBakPath);
-        if (File.Exists(metaPath)) File.Copy(metaPath, metaBakPath);
+        if (File.Exists(metaBakPath)) File.Delete(metaBakPath);//删除.Bak文件，如果有
+        if (File.Exists(metaPath)) File.Copy(metaPath, metaBakPath);//如果有.meta文件，复制到.Bak文件
         AssetDatabase.DeleteAsset(newPath);
         AssetDatabase.Refresh();
         //bool copyResult = AssetDatabase.CopyAsset(path, newPath);
-        File.Copy(path, newPath);
+        File.Copy(path, newPath);//将EditData的prefab复制到Resources
         if (File.Exists(newPath))
         {
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            if (mainPanelPath != null)
+            if (mainPanelPath != null)//处理在 BatchSetting.json 配置的Panel
             {
                 DeletePng(newFolderPath, panelName, mainPanelSettingContent);
-                Debug.LogError("GeneratePrefabByPrefab:mainPanelPath != null");
                 PanelAtlasGenerator.GenerateAtlasByPanels(_editPanelsAssetPath, _resourceGUIAssetPath, mainPanelSettingContent, mainPanelName, forceSquare, etc, padding);
             }
-            else
+            else//处理在 BatchSetting.json没有配置的Panel
             {
                 PanelAtlasGenerator.GenerateAtlas(newPath, forceSquare, etc, padding);
             }
@@ -382,4 +385,283 @@ PrefabGenerator{
                 }
         }
     }
+
+    //这里删除的应该是 BatchSetting.json里非主Panel的其他Panel的png
+    //path=newFolderPath://"F:...Assets/Resources/GUI/cn/Panel_Character"
+    //panelName://Panel_Character
+    //names://BatchSetting.json里的包含panelName的数组
+    //假如 BatchSetting.json[Panel_Character, Panel_Demo]
+    static void DeletePng(string path, string panelName, List<string> names)
+    {
+        for (int i = 1; i < names.Count; i++)
+        {
+            //"F:...Assets/Resources/GUI/cn/Panel_Demo"
+            string delPath = path.Replace(panelName, names[i]);
+            
+            //"F:...Assets/Resources/GUI/cn/Panel_Demo/Panel_Demo.png"
+            string pngPath = Path.Combine(delPath, string.Concat(names[i], ".png")).Replace('\\', '/');
+            
+            //"F:...Assets/Resources/GUI/cn/Panel_Demo/Panel_Demo.png.meta"
+            string metaPath = string.Concat(pngPath, ".meta");
+
+            //删除
+            if (File.Exists(pngPath)) File.Delete(pngPath);
+            if (File.Exists(metaPath)) File.Delete(metaPath);
+            
+            //"F:...Assets/Resources/GUI/cn/Panel_Demo/Panel_Demo_alpha.png"
+            pngPath = Path.Combine(delPath, string.Concat(names[i], "_alpha.png")).Replace('\\', '/');
+
+            //"F:...Assets/Resources/GUI/cn/Panel_Demo/Panel_Demo_alpha.png.meta"
+            metaPath = string.Concat(pngPath, ".meta");
+
+            //删除
+            if (File.Exists(pngPath)) File.Delete(pngPath);
+            if (File.Exists(metaPath)) File.Delete(metaPath);
+
+            //"F:...Assets/Resources/GUI/cn/Panel_Demo/Panel_Demo_etc.mat"
+            pngPath = Path.Combine(delPath, string.Concat(names[i], "_etc.mat")).Replace('\\', '/');
+            //"F:...Assets/Resources/GUI/cn/Panel_Demo/Panel_Demo_etc.mat.meta"
+
+            //删除
+            metaPath = string.Concat(pngPath, ".meta"); 
+            if (File.Exists(pngPath)) File.Delete(pngPath);
+            if (File.Exists(metaPath)) File.Delete(metaPath);
+        }
+    }
+}
+
+PanelAtlasGenerator{
+
+    public const string SHARED_NAME = "GUI_Shared";
+    public const string L10N_NAME = "GUI_L10n";
+	private const int MAX_ATLAS_SIZE = 2048;    
+	private const int RECOMMEND_ATLAS_SIZE = 1024; 
+	public const int BORDER = 2; //带Clamp参数的边缘补2个像素
+
+    //处理配置的Panels
+    //panelPath//"Assets/EditData/GUI/Panels"
+    //path//"Assets/Resources/GUI/cn"
+    //panels//BatchSetting.json配置
+    //mainPanelName//panels[0]
+    //forceSquare=false
+    //etc=false
+    //padding=2 or 1
+    public static void GenerateAtlasByPanels(string panelPath, string path, List<string> panels, string mainPanelName, bool forceSquare = false, bool etc = false, int padding = 1)
+    {
+        List<SpriteTexture2DInfo> spritesInfo = new List<SpriteTexture2DInfo>();
+        HashSet<string> addNameList = new HashSet<string>();
+
+        //"Assets/Resources/GUI/cn/Panel_Character/Panel_Character.prefab"
+        string prefabPath = string.Format("{0}/{1}/{2}.prefab", path, mainPanelName, mainPanelName);
+
+        foreach (string panelName in panels)
+        {
+            //"Assets/EditData/GUI/Panels/Panel_Character.prefab"
+            SetSpritesInfo(string.Format("{0}/{1}.prefab", panelPath, panelName), spritesInfo, addNameList);
+        }
+        PanelAtlasGenerator.CreateAtlas(spritesInfo, Path.GetDirectoryName(prefabPath), Path.GetFileNameWithoutExtension(prefabPath), forceSquare, etc, padding);
+    }
+
+    //spritesInfo
+    //"Assets/Resources/GUI/cn/Panel_Character/Panel_Character.prefab"
+    //targetPath//"Assets/Resources/GUI/cn/Panel_Character"
+    //atlasName:Panel_Character
+    //forceSquare:false
+    //etc:false
+    //padding:1
+     public static void CreateAtlas(List<SpriteTexture2DInfo> spritesInfo, string targetPath, string atlasName, bool forceSquare = false, bool etc = false, int padding = 1)
+	{
+        ClearPngs(targetPath, atlasName);//删除原有的，如果有
+        if (spritesInfo.Count == 0)
+        {
+            return;
+        }
+		Texture2D atlas = new Texture2D(MAX_ATLAS_SIZE, MAX_ATLAS_SIZE);
+		Texture2D[] sprites = new Texture2D[spritesInfo.Count];
+		for(int i = 0; i < spritesInfo.Count; i++) {
+			sprites[i] = spritesInfo[i].texture;
+		}
+        Rect[] rects = atlas.PackTextures(sprites, padding, MAX_ATLAS_SIZE, false);
+        string path = Path.Combine(targetPath, atlasName + ".png");
+        atlas = OptimizeAtlas(atlas, rects, forceSquare);
+        if (padding > 1) AppendPixels(rects, atlas);
+        bool saveResult = SaveAtlas(atlas, path);
+		int atlasWidth = atlas.width;
+		int atlasHeight = atlas.height;
+		if(atlasWidth > RECOMMEND_ATLAS_SIZE || atlas.height > RECOMMEND_ATLAS_SIZE)
+		{
+			Debug.Log(string.Format("<color=#ff0000>【错误】图集宽或高超过1024像素: {0} </color>", atlasName));
+		}
+		else
+		{
+			Debug.Log(string.Format("<color=#00ff00>图集 {0} 尺寸为： {1}x{2} </color>", atlasName, atlasWidth, atlasHeight));
+		}
+        if (!saveResult) return; //如果没有进行保存，证明数据没变，不需要重新划分sprite
+		ImportAsset(new List<string>() { path });
+		CreateSpriteImporter(path, true, TextureImporterFormat.RGBA32);
+		ImportAsset(new List<string>() { path });
+        CreateMultipleSpriteImporter(spritesInfo, path, rects, atlasWidth, atlasHeight, etc);
+		ImportAsset(new List<string>() { path });
+        if (etc) { GenerateEtcs(targetPath, atlasName); }
+        else {
+            Generate565A8(targetPath, atlasName);
+        }
+	}
+    //atlas:生成的图集
+    //rects:子图
+    //强制
+    public static Texture2D OptimizeAtlas(Texture2D atlas, Rect[] rects, bool forceSquare = false)
+	{
+		Texture2D result = atlas;
+		Rect contentRect = GetAtlasContentRect(rects);
+		//处理出现超过一半为空的情况
+        for (float i = 0.125f; i <= 0.5f; i = i * 2f)
+        {
+            if (contentRect.width <= i)
+            {
+                result = CreateResizedAtlas(result, i, 1.0f, rects);
+                break;
+            }
+        }
+        for (float i = 0.125f; i <= 0.5f; i = i * 2f)
+        {
+            if (contentRect.height <= i)
+            {
+                result = CreateResizedAtlas(result, 1.0f, i, rects);
+                break;
+            }
+        }
+		if(forceSquare == true)
+		{
+            if (result.width > result.height)
+			{
+                result = CreateResizedAtlas(result, 1.0f, 2.0f, rects);
+			}
+            else if (result.width < result.height)
+			{
+                result = CreateResizedAtlas(result, 2.0f, 1.0f, rects);
+			}
+		}
+		return result;
+	}
+
+    //targetPath//"Assets/Resources/GUI/cn/Panel_Character"
+    //atlasName:Panel_Character
+    private static void ClearPngs(string targetPath, string atlasName)
+	{
+        string path = Path.Combine(targetPath, atlasName);
+        string pngPath = Application.dataPath + path.Replace("Assets", "") +".png";
+        string pngAlphaPath = Application.dataPath + path.Replace("Assets", "") + "_alpha.png";
+        string matPath = Application.dataPath + path.Replace("Assets", "") + "_etc.mat";        
+        if (File.Exists(pngPath))
+        {
+            File.Delete(pngPath);
+        }
+        if (File.Exists(pngAlphaPath))
+        {
+            File.Delete(pngAlphaPath);
+        }
+        if (File.Exists(matPath))
+        {
+            File.Delete(matPath);
+        }
+	}
+
+    //"Assets/EditData/GUI/Panels/Panel_Character.prefab"
+    //empty spritesInfo
+    //empty addNameList
+    private static void SetSpritesInfo(string prefabPath, List<SpriteTexture2DInfo> spritesInfo, HashSet<string> addNameList = null)
+    {
+        GameObject newPrefab = AssetDatabase.LoadAssetAtPath(prefabPath, typeof(GameObject)) as GameObject;
+        if (newPrefab == null)
+        {
+            Debug.LogError("newPrefab is null : " + prefabPath);
+            return;
+        }
+        string[] dependencies = AssetDatabase.GetDependencies(prefabPath);
+
+        for (int i = 0; i < dependencies.Length; i++)
+        {
+            string depPath = dependencies[i];
+            string spriteName = Path.GetFileNameWithoutExtension(depPath);
+            if (Path.GetExtension(depPath) == ".png")//处理png
+            {
+                //检查目录
+                if (Path.GetDirectoryName(depPath).IndexOf("EditData/GUI/Sprites") < 0)
+                {
+                    //throw new ArgumentException("sprite ，目录引用错误：", depPath);
+                    Debug.LogError("SetSpritesInfo: sprite Error :" + prefabPath + ":" + spriteName + ":" + depPath);
+                    continue;
+                }
+                if (Path.GetDirectoryName(depPath).EndsWith("/" + SHARED_NAME) && newPrefab.name != SHARED_NAME)
+                {
+                    continue;
+                }
+                if (Path.GetDirectoryName(depPath).EndsWith("/" + L10N_NAME) && newPrefab.name != L10N_NAME)
+                {
+                    continue;
+                }
+                //
+                if (addNameList != null && addNameList.Contains(spriteName))
+                {
+                    continue;
+                }
+
+                var textureImporter = TextureImporter.GetAtPath(depPath) as TextureImporter;                
+
+                var spritesheet = textureImporter.spritesheet;
+                if (textureImporter.textureType != TextureImporterType.Advanced || !textureImporter.isReadable
+                    || textureImporter.textureFormat != TextureImporterFormat.AutomaticTruecolor)
+                {
+                    textureImporter.textureType = TextureImporterType.Advanced;
+                    textureImporter.isReadable = true;
+                    textureImporter.textureFormat = TextureImporterFormat.AutomaticTruecolor;
+                    AssetDatabase.ImportAsset(depPath);
+                    AssetDatabase.Refresh();
+                }
+                var texture2d = AssetDatabase.LoadAssetAtPath<Texture2D>(depPath);
+                SpriteTexture2DInfo info = new SpriteTexture2DInfo();
+                info.textureImporter = textureImporter;
+                info.texture = texture2d;
+                spritesInfo.Add(info);
+                if (addNameList != null)
+                {
+                    addNameList.Add(spriteName);
+                }                
+            }
+        }
+    }
+
+    private static Rect GetAtlasContentRect(Rect[] rects)
+	{
+		Rect contentRect = new Rect(0, 0, 0, 0);
+		for(int i = 0; i < rects.Length; i++)
+		{
+			Rect rect = rects[i];
+			if(rect.xMin < contentRect.xMin)
+			{
+				contentRect.xMin = rect.xMin;
+			}
+			if(rect.yMin < contentRect.yMin)
+			{
+				contentRect.yMin = rect.yMin;
+			}
+			if(rect.xMax > contentRect.xMax)
+			{
+				contentRect.xMax = rect.xMax;
+			}
+			if(rect.yMax > contentRect.yMax)
+			{
+				contentRect.yMax = rect.yMax;
+			}
+		}
+		return contentRect;
+	}
+}
+
+//官方文档，详细描述
+SpriteTexture2DInfo
+{
+    public Texture2D texture;
+    public TextureImporter textureImporter;
 }

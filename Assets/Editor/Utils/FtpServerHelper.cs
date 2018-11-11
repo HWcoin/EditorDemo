@@ -222,7 +222,7 @@ public class FtpServerHelper {
         catch (Exception ex)
         {
             downloadFiles = null;
-            Debug.LogError("获取文件列表失败!");
+            Debug.LogError("获取文件列表失败!"+ex.Message);
             return downloadFiles;
         }
     }

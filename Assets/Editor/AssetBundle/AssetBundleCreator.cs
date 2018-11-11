@@ -50,12 +50,14 @@ public class AssetBundleCreator {
         }
 
         List<Texture2D> texList = new List<Texture2D>();
+        List<TextureImporter> texImporterList = new List<TextureImporter>();
 
         foreach(FileInfo fileInfo in folder.GetFiles()){
             string fileFullName = fileInfo.FullName;
             if (!Path.GetExtension(fileFullName).Contains(".meta")) {
                 string texPath = fileFullName.Replace("\\", "/").Replace(Application.dataPath, "Assets");
                 texList.Add(AssetDatabase.LoadAssetAtPath(texPath, typeof(Texture2D)) as Texture2D);
+                texImporterList.Add(AssetImporter.GetAtPath(texPath) as TextureImporter);
             }
         }
         if (texList.Count > 0) {
@@ -65,6 +67,42 @@ public class AssetBundleCreator {
             byte[] buff = altas.EncodeToPNG();
             File.WriteAllBytes(targetName, buff);
             AssetDatabase.Refresh();
+            TextureImporter targetImporter = AssetImporter.GetAtPath(targetName) as TextureImporter;
+            Debug.LogError("targetImporter is null :" + (targetImporter == null));
+
+            List<SpriteMetaData> metaDatas = new List<SpriteMetaData>();
+            Debug.LogError("texList:" + texList.Count);
+            Debug.LogError("texImporterList:" + texImporterList.Count);
+            for (int i = 0; i < texList.Count; i++) {
+                Texture2D curTexInfo = texList[i];
+
+                Rect curRect = rects[i];
+
+                Rect newRect = new Rect(curRect.x, curRect.y, curRect.width, curRect.height);
+
+                SpriteMetaData metaData = new SpriteMetaData();
+                metaData.name = curTexInfo.name;
+                metaData.rect = curRect;
+                metaData.border = texImporterList[i].spriteBorder;
+                metaData.pivot = new Vector2(0.5f, 0.5f);
+                metaDatas.Add(metaData);
+            }
+            Debug.LogError(targetName);
+            targetImporter.textureType = TextureImporterType.Advanced;
+            targetImporter.spritesheet = metaDatas.ToArray();
+            targetImporter.maxTextureSize = 1024;
+            targetImporter.filterMode = FilterMode.Bilinear;
+            targetImporter.wrapMode = TextureWrapMode.Clamp;
+            //targetImporter.
+            targetImporter.textureFormat = TextureImporterFormat.ARGB16;
+
+            targetImporter.SetPlatformTextureSettings("Standalone", 1024, TextureImporterFormat.ARGB16);
+            //targetImporter.SetPlatformTextureSettings("Android", 1024, TextureImporterFormat.ARGB16, true);
+            //targetImporter.SetPlatformTextureSettings("iPhone", 1024, TextureImporterFormat.ARGB16);
+            targetImporter.compressionQuality = 100;
+            TextureImporterSettings setting = new TextureImporterSettings();
+            targetImporter.ReadTextureSettings(setting);
+            targetImporter.SetTextureSettings(setting);
         }
     }
 
