@@ -45,6 +45,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+     <Compile Include="Assets\Scripts\CharacterControlScene\SphereTest.cs" />
      <Compile Include="Assets\Scripts\ImageTexture2D.cs" />
      <Compile Include="Assets\Scripts\LuaFacade.cs" />
      <Compile Include="Assets\Scripts\PersonUtil.cs" />
@@ -111,6 +112,7 @@
      <Compile Include="Assets\Source\Generate\UnityEngine_WWWWrap.cs" />
      <Compile Include="Assets\Source\Generate\UnityEngine_WrapModeWrap.cs" />
      <Compile Include="Assets\Source\LuaConst.cs" />
+     <Compile Include="Assets\TestCuteRotate.cs" />
      <Compile Include="Assets\ToLua\BaseType\LuaInterface_EventObjectWrap.cs" />
      <Compile Include="Assets\ToLua\BaseType\LuaInterface_LuaConstructorWrap.cs" />
      <Compile Include="Assets\ToLua\BaseType\LuaInterface_LuaFieldWrap.cs" />

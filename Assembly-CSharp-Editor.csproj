@@ -52,6 +52,7 @@
      <Compile Include="Assets\Editor\Demo\FileTreeViewUtil.cs" />
      <Compile Include="Assets\Editor\EditorSettings.cs" />
      <Compile Include="Assets\Editor\Import\TextureAutoImport.cs" />
+     <Compile Include="Assets\Editor\Utils\FileSystemHelper.cs" />
      <Compile Include="Assets\Editor\Utils\FileTreeView.cs" />
      <Compile Include="Assets\Editor\Utils\FtpServerHelper.cs" />
      <Compile Include="Assets\Editor\Utils\TreeNode.cs" />

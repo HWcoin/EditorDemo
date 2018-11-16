@@ -31,6 +31,12 @@
     Artproject Build/pkg/Build Update GameLoader
     RuntimeProject Update/UpdateGameLoader
 
+    //手动修改打包的版本号，需要关注RuntimeProject目录下的几个Txt文件
+    1. StreamingAssetResourceVersion.txt
+    2. StreamingAssetGameLoaderVersion.txt
+    3. GameLoaderPath.txt
+    4. BuildApkTime.txt
+
 ]
 
 GameLoaderPath = "/Resources/bytes$gameloader.bytes.u"

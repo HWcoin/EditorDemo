@@ -5,8 +5,25 @@ using System.Collections.Generic;
 
 public class AssetBundleCreator {
 
-    public static void BuildAssetBundle() { 
-    
+    [MenuItem("AssetBundle/AssetBundle/build by prefab")]
+    public static void BuildAssetBundle() {
+        Object[] selectAssets = Selection.GetFiltered(typeof(Object), SelectionMode.DeepAssets);
+
+        foreach (Object obj in selectAssets) {
+            string sourcePath = AssetDatabase.GetAssetPath(obj);
+            Debug.LogError(sourcePath);
+            string targetPath = Application.dataPath + "/StreamingAssets/" + obj.name + ".assetbundle";
+
+            if (BuildPipeline.BuildAssetBundles(Application.dataPath + "/StreamingAssets", BuildAssetBundleOptions.None, BuildTarget.StandaloneWindows64))
+            {
+                Debug.Log(obj.name + "资源打包成功");
+            }
+            else
+            {
+                Debug.Log(obj.name + "资源打包失败");
+            }
+            AssetDatabase.Refresh();
+        }
     }
 
     [MenuItem("AssetBundle/Texture2D/texture packer", false, 1)]
