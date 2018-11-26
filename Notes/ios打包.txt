@@ -1,0 +1,22 @@
+DevProject:
+1. Build setting, 包名，游戏名
+2. Build -> xcode
+3. 接sdk -> 根据文档
+4. 复制json文件配置的文件及文件夹
+5. 再DevProject目录下： mogo build xxx.json(先进入json文件夹内)，json文件在mainland同级文件夹的tools/config下
+
+接SDK:
+UnityAppController:初始化接口
+appstoreqjzr.mm:sdk接口
+
+
+打包过程中的报错集合：
+
+1.问题： directory not found for option "..../Libraries",原因是lib找不到。
+解决：在Build setting中搜索lib,查看Search Paths/Library Search Paths里配置的路径是否有问题（一般这里的路径不加双引号）
+
+2.问题：libtolua.a报错
+解决：Build option Enable Bitcode -> no
+
+3.问题：xcodeConfig配置Developer和Provision
+解决：复制Build Settings/Signing 中的Code Signing Identity和Provisioning Profile
