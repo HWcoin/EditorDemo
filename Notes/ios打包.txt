@@ -2,13 +2,36 @@ DevProject:
 1. Build setting, 包名，游戏名
 2. Build -> xcode
 3. 接sdk -> 根据文档
+    1> 添加Plugins文件夹
+    2> UnityAppController.mm文件初始化
+        - 必要时修改appId
+        - 头文件声明(两个)
+        - 添加didFinishLaunchingWithOptions初始化方法
+        - applicationDidEnterBackground
+        - applicationWillEnterForeground
+        - applicationDidBecomeActive
+        - applicationWillResignActive
+        - applicationDidReceiveMemoryWarning
+        - applicationWillTerminate
+    4> General -> Signing
+    5> info does not run in background -> no
+    6> Build Settings (Build Options -> Enable Bitcode(no))
+    7> Build Settings (Code Signing Identity -> 选中 Provisioning Profile)
 4. 复制json文件配置的文件及文件夹
 5. 再DevProject目录下： mogo build xxx.json(先进入json文件夹内)，json文件在mainland同级文件夹的tools/config下
+
+注意：
+1. ios平台打包资源与Android平台类似，需要把Unity的环境改成ios
+2. ios打包注意关掉Unity。ios打包注意关掉Unity。ios打包注意关掉Unity。或者检查Unity是否有报错。再不行就重新copy一份模板
+3. 查询签名的证书：security cms -D -i XXX.mobileprovision, mobileprovision文件由运营给，双击替换旧的，问题3中会用到uuid
+4. 移动plugins注意Copy item if needs,防止多copy一份
+
 
 接SDK:
 UnityAppController:初始化接口
 appstoreqjzr.mm:sdk接口
 
+svn checkout http://....
 
 打包过程中的报错集合：
 
@@ -20,3 +43,14 @@ appstoreqjzr.mm:sdk接口
 
 3.问题：xcodeConfig配置Developer和Provision
 解决：复制Build Settings/Signing 中的Code Signing Identity和Provisioning Profile
+
+远程链接：
+\\192.168.11.213
+aion_mac_one
+1
+
+
+
+
+
+
