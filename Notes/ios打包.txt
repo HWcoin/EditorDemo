@@ -18,14 +18,15 @@ DevProject:
     6> Build Settings (Build Options -> Enable Bitcode(no))
     7> Build Settings (Code Signing Identity -> 选中 Provisioning Profile)
 4. 复制json文件配置的文件及文件夹
-5. 再DevProject目录下： mogo build xxx.json(先进入json文件夹内)，json文件在mainland同级文件夹的tools/config下
+5. 再DevProject目录下： mogo build xxx.json(先进入xiangmu文件夹内)，json文件在mainland同级文件夹的tools/config下
 
 注意：
 1. ios平台打包资源与Android平台类似，需要把Unity的环境改成ios
 2. ios打包注意关掉Unity。ios打包注意关掉Unity。ios打包注意关掉Unity。或者检查Unity是否有报错。再不行就重新copy一份模板
 3. 查询签名的证书：security cms -D -i XXX.mobileprovision, mobileprovision文件由运营给，双击替换旧的，问题3中会用到uuid
 4. 移动plugins注意Copy item if needs,防止多copy一份
-
+5. LaunchScreen设置：在Unity的Player setting选项设置Splash Image，Unity 中，splash image 的 Import settings 中 Texture Type 要改为 Advanced。
+6. Plugins文件夹所有文件：Relative to Project
 
 接SDK:
 UnityAppController:初始化接口
@@ -49,8 +50,167 @@ svn checkout http://....
 aion_mac_one
 1
 
+记录下我修改的debug配置
+Product scheme edit_scheme run debug
+Product scheme edit_scheme profile debug
+Build Options Debug Information Format debug dwarf with...
+Deployment debug yes
+
+1.游客登录/注册账号点击开始游戏，游戏闪退（可能跟第二个BUG有关）
+2.info.plist参数文件无"NSPhotoLibraryUsageDescription"&"NSPhotoLibraryAddUsageDescription"值"为了方便后续找回账号密码，是否允许此App保存账号密码到相册"
+NSPhotoLibraryUsageDescription
+NSPhotoLibraryAddUsageDescription
+
+
+命令行编译
+xcodebuild -target demo 
+xcodebuild -target demo -configuration Debug 
+sudo xcrun -sdk iphoneos PackageApplication    -v build/Release-iphoneos/test.app  -o `pwd`/build/Release-iphoneos/test2.ipa
+
+//unity 打出来的
+command = "xcodebuild -scheme Unity-iPhone -configuration Release -archivePath target archive > build.log"
+command = "xcrun -sdk iphoneos PackageApplication -v target.xcarchive/Products/Applications/%s.app -o %s > xcrun.log"
+
+接语音注意：
+UnityAppController
+appstoreqjzr
+C#  + 增加播放接口
+    + 增加onEnterShop
+    + 增加iPhone可以使用语音
+    + 增加iPhone可以播放语音
+导入包
+
+测试聊天账号：
+21050400434
+109602
+svxwpx
+
+
+adb
+adb shell ps       //查看所有进程列表，Process Status
+adb shell ps|grep <package_name>    //查看package_name程序进程
+
+
+问题：
+
+闪图->
+FFmpeg
+
+准备一个环境
+Unity ios交互
+备份环境，plugins,UnityAppController,权限，
+ios语音完善
+
+
+SDK增加=====================================================================================================================
+
+
+注意：先加接口，闪图, 以后有新接口必须先在主干上加
+LuaFacade:OnEnterShop,语音三接口，精灵接口
+LuaFacadeWrapper:
+VoiceManager:打开IOS环境中的语音播放接口
+LuaUIVoiceDriver:打开IOS语音开关
+
+新文档
+plugin
+语音接入：
+        IOS语音初始化
+        导入库：iFly,libc++
+        C#：1.三个开始，结束，播放录音接口，这里不需要加，都再LuaUIVoiceDriver开启就可以了。
+            2.开启平台显示
+            3.权限，包括运营那边的权限
+        IOS：讯飞语音初始化
+            给C#提供接口
+        AVAudioSession
+新SDK接入：
+        onEnterFuEvent(需要修改C#,GameMain, PlatformSDKManager, Lua)
+权限:
+<key>NSMicrophoneUsageDescription</key>
+<string>麦克风</string>
+<key>NSLocationUsageDescription</key>
+<string>位置</string>
+<key>NSLocationAlwaysUsageDescription</key>
+<string>始终访问位置</string>
+<key>NSContactsUsageDescription</key>
+<string>通讯录</string>
+<key>NSPhotoLibraryUsageDescription</key>
+<string>为了方便后续找回账号密码，是否允许此App保存账号密码到相册</string>
+<key>NSPhotoLibraryAddUsageDescription</key>
+<string>为了方便后续找回账号密码，是否允许此App保存账号密码到相册</string>
+
+乱码，颜色:
+string.gsub(text, "<color=#[%x]+>", "")
+string.gsub(gtext, "</color>", "")
+
+电量：C#增加接口, IOS增加接口
+
+IOS运营文档。
+
+
+===========================================================================================================================
+测试版本时间：4:20
+
+//任务
+实现ios + unity demo;
+实现Android + unity demo;
 
 
 
+===========================================================================================================================
+注：参数传递有严格的规定,易出错
+
+一、unity 调用 ios
+
+1. unity脚本中使用如下方式定义ios端的接口
+[DllImport("__Internal")]
+public extern static string nativeMethod();
+2. 在ios类文件(继承自UIViewController)结尾处(@end之后)定义extern "C"模块,
+给unity端提供的接口都放这里。如果extern "C"报错,则是objective-c不支持C++,需要设置一下。
+
+二、ios 调用 unity(有两种方式可以选择)
+
+    UnitySendMessage方式(简便)
+    直接调用UnitySendMessage("ObjName", "MethodName", "args")
+
+    非托管方法方式(回调,灵活)
+    双方都定义一个委托,unity将要使用的委托放到ios,由于ios也有定义同类型的委托,所以能够识别并调用,具体如下：
+    .h和.mm
+1. 建立一个delegate声明，并使用UnmanagedFunctionPointer特性来标识该delegate是非托管方法。代码如下：
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+public delegate void ResultHandler(string resultstring)
+其中的CallingConvention.Cdel为调用时转换为C声明接口。
+
+2. 然后声明一个静态方法，并使用MonoPInvokeCallback特性来标记为回调方法，目的是让iOS中调用该方法时可以转换为对应的托管方法。如：
+[MonoPInvokeCallback(typeof(ResultHandler))]
+static void resultHandler(string result str)
+{
+//具体实现
+}
+注意：MonoPInvokeCallback特性参数是上一步中定义的非托管delegate。方法的声明一定要与delegate定义一致，并且必须为static进行修饰（iOS不支持非静态方法回调），否则会导致异常。
+
+3. ios定义新接口
+typedef void (*ResultHandler) (const char *object);
+void outputAppendString2 (char *str1, char *str2, ResultHandler resultHandler)
+{
+    resultHandler (resultStr.UTF8String);
+}
+上面代码可见，在C中需要定义一个与C#的delgate相同的函数指针ResultHandler。然后新增的outputAppendString2方法中多了一个回调参数resultHandler。这样就能够把C#传入的方法进行调用了。
+
+4. unity定义新接口
+[DllImport("__Internal")]
+static extern void outputAppendString2 (string str1, string str2, IntPtr resultHandler);
+注意：回调方法的参数必须是IntPtr类型，表示一个函数指针。
+
+5. 在Start方法中调用outputAppendString2，并将回调方法转换为IntPtr类型传给方法。如：
+ResultHandler handler = new ResultHandler(resultHandler);
+IntPtr fp = Marshal.GetFunctionPointerForDelegate(handler);
+outputAppendString2 ("Hello", "World", fp);
+上面代码使用Marshal的GetFunctionPointerForDelegate来获取resultHandler的指针。
+
+三、参数传递
+
+    Marshal:用于解决参数，返回值是对象类型的情况
+    Marshal类型主要是用于将C#中托管和非托管类型进行一个转换的桥梁。其提供了一系列的方法，这些方法包括用于分配非托管内存、复制非托管内存块、将托管类型转换为非托管类型，此外还提供了在与非托管代码交互时使用的其他杂项方法等。
 
 
+===========================================================================================================================
