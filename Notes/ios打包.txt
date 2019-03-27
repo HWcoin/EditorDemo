@@ -17,6 +17,7 @@ DevProject:
     5> info does not run in background -> no
     6> Build Settings (Build Options -> Enable Bitcode(no))
     7> Build Settings (Code Signing Identity -> 选中 Provisioning Profile)
+    8> TakePhotoController.mm Build Phases >>> -fno-objc-arc
 4. 复制json文件配置的文件及文件夹
 5. 再DevProject目录下： mogo build xxx.json(先进入xiangmu文件夹内)，json文件在mainland同级文件夹的tools/config下
 
@@ -32,7 +33,9 @@ DevProject:
 UnityAppController:初始化接口
 appstoreqjzr.mm:sdk接口
 
-svn checkout http://....
+svn checkout http://.... --username wupeijian
+svn info url
+svn switch url
 
 打包过程中的报错集合：
 
@@ -44,6 +47,18 @@ svn checkout http://....
 
 3.问题：xcodeConfig配置Developer和Provision
 解决：复制Build Settings/Signing 中的Code Signing Identity和Provisioning Profile
+
+4.问题： ARC报错
+解决：
+target -> Build Phases -> Compile Sources
+双击报错的 *.m 文件
+在窗口中输入-fno-objc-arc
+如果使用的非 ARC ，则为 ARC 的代码加入 -fobjc-arc 
+如果使用的是 ARC ，则为非 ARC 代码加入 -fno-objc-arc
+判断项目是否使用arc：Build Setting -> Automatic Reference Counting Yes/No 
+
+5.问题：linker command failed with exit code 1(use -v to see invocation)
+解决：同名文件，删掉重复的即可
 
 远程链接：
 \\192.168.11.213
@@ -60,9 +75,9 @@ Deployment debug yes
 2.info.plist参数文件无"NSPhotoLibraryUsageDescription"&"NSPhotoLibraryAddUsageDescription"值"为了方便后续找回账号密码，是否允许此App保存账号密码到相册"
 NSPhotoLibraryUsageDescription
 NSPhotoLibraryAddUsageDescription
+LoggerHelper.Log(GameUtil.StringUtil.SubStringGetTotalIndex("你好abc"))
 
-
-命令行编译
+命令行编译：demo=项目目录
 xcodebuild -target demo 
 xcodebuild -target demo -configuration Debug 
 sudo xcrun -sdk iphoneos PackageApplication    -v build/Release-iphoneos/test.app  -o `pwd`/build/Release-iphoneos/test2.ipa
@@ -80,12 +95,6 @@ C#  + 增加播放接口
     + 增加iPhone可以播放语音
 导入包
 
-测试聊天账号：
-21050400434
-109602
-svxwpx
-
-
 adb
 adb shell ps       //查看所有进程列表，Process Status
 adb shell ps|grep <package_name>    //查看package_name程序进程
@@ -101,6 +110,9 @@ Unity ios交互
 备份环境，plugins,UnityAppController,权限，
 ios语音完善
 
+opengles3 卡屏
+opengles2 
+没有参数 --
 
 SDK增加=====================================================================================================================
 
@@ -214,3 +226,6 @@ outputAppendString2 ("Hello", "World", fp);
 
 
 ===========================================================================================================================
+
+整理 jni打包流程，lame库使用,FFmpeg使用
+lame: https://blog.csdn.net/q919233914/article/details/54603441
