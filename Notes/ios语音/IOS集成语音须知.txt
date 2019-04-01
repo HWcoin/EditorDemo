@@ -1,0 +1,36 @@
+讯飞语音
+账号：18825163995
+密码：18825163995Wpj
+
+1) 初始化代码：
+在UnityAppController.mm的didFinishLaunchingWithOptions方法中添加下面代码：
+
+//讯飞语音:Appid是应用的身份信息，具有唯一性，初始化时必须要传入Appid。
+NSString *initString = [[NSString alloc] initWithFormat:@"appid=%@", @"5c1778cc"];
+[IFlySpeechUtility createUtility:initString];
+NSLog(@"[ifly] 初始化SDK");
+[[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback error:nil];
+
+2) 添加库：
+iflyMSC.framework
+libc++
+
+3) 添加权限：(后三个权限可选)
+<key>NSMicrophoneUsageDescription</key>
+<string>麦克风</string>
+<key>NSPhotoLibraryUsageDescription</key>
+<string>为了方便后续找回账号密码，是否允许此App保存账号密码到相册</string>
+<key>NSPhotoLibraryAddUsageDescription</key>
+<string>为了方便后续找回账号密码，是否允许此App保存账号密码到相册</string>
+<key>NSLocationUsageDescription</key>
+<string>位置</string>
+<key>NSLocationAlwaysUsageDescription</key>
+<string>始终访问位置</string>
+<key>NSContactsUsageDescription</key>
+<string>通讯录</string>
+
+4) 使用
+导入IOSVoiceTool.h,有如下接口：
+    1. 开始录音：+(void) _StartVoice;
+    2. 结束录音：+(void) _CloseVoice;
+    3. 播放录音：+(void) _PlayMusic:(NSString *)sound_path;
